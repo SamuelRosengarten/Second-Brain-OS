@@ -57,6 +57,14 @@ Never port-forward 3000 or 11434 and never use `tailscale funnel` (public).
 4. In `.env.local` set `SBOS_SECURE_COOKIES=1` and `SBOS_ALLOWED_ORIGINS=https://<machine>.<tailnet>.ts.net`, then restart the app.
 5. On the iPhone, with the Tailscale app connected, open `https://<machine>.<tailnet>.ts.net` in Safari and sign in. Share, then Add to Home Screen. It opens full screen with its own icon (web app manifest). If you added it before this was set up, delete the old shortcut and add it again; an installed web app keeps its own sign-in, so you sign in once more.
 
+### Send things to your inbox from the iPhone Share sheet
+
+In **Settings, iPhone quick capture**, click **Create token** and copy the token and the address shown (the token appears once). Then in the iPhone Shortcuts app: add **Get Contents of URL** with that address, Method **POST**, header `Authorization: Bearer <token>`, Request Body **JSON** with a Text field `content` set to **Shortcut Input**, and turn on **Show in Share Sheet** for text and URLs. Shared text lands in the Inbox; a link on its own is saved as a link.
+
+The token can only create captures (it cannot read, sign in or change settings), is stored only as a keyed digest, and stops working when you replace or revoke it, change your password or change `SBOS_SESSION_SECRET`. Use it only with the Tailscale address. The exact Shortcuts steps were written from the app's design, not tried on a phone yet.
+
+If the PC is off or you are off the tailnet, text typed into the app is kept as a draft on that device and restored after a reload (attached files are not kept).
+
 `localhost` on the phone is the phone itself and will never work. A `502 Bad Gateway` means the app is not running on the PC. The PC must be on, logged in, and Ollama running for AI features. Details in [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Backups
@@ -94,9 +102,9 @@ A copy on the same physical disk does not protect against disk failure; use a di
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | 60 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat, safe Markdown rendering |
+| `npm test` | 71 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat, safe Markdown rendering |
 | `npm run typecheck` | TypeScript |
-| `npm run build` then `npm run e2e` | 18 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus. Screenshots are saved to `test-results/shots/` |
+| `npm run build` then `npm run e2e` | 21 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, saved drafts, capture token, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus. Screenshots are saved to `test-results/shots/` |
 | `npm run smoke` | HTTP end-to-end against a running instance, with real Ollama (see docs/SETUP.md) |
 | `npm run audit` | Dependency audit |
 

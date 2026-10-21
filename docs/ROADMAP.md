@@ -7,10 +7,11 @@ Phases 0 to 4 and the software parts of 5 and 6: capture inbox, knowledge librar
 ## Not done or not verified yet
 
 - iPhone over Tailscale HTTPS (`tailscale serve`, tailnet only, secure cookies) was set up and verified by hand: sign-in and a capture made on the phone appeared on the PC. The app auto-starts at login via the `SecondBrainOS` scheduled task. Not yet verified: that ports 3000 and 11434 are unreachable from outside the tailnet.
-- Playwright browser tests exist (18: desktop, phone and responsive widths, fake Ollama, installed Chrome). They run on demand, not in CI. Not verified: whether the New-conversation regression test fails on the old buggy code, since that crash depended on how the browser's `scrollIntoView` behaves.
+- Playwright browser tests exist (21: desktop, phone and responsive widths, fake Ollama, installed Chrome). They run on demand, not in CI. Not verified: whether the New-conversation regression test fails on the old buggy code, since that crash depended on how the browser's `scrollIntoView` behaves.
 - Semantic search was verified by hand with `nomic-embed-text` (semantic badge on keyword-free queries, cited grounded answers, refusal when evidence is missing). Automated tests still use a deterministic fake embedder; quality on a large real library is untested.
 - Weekly backup runs (Sundays 10:00, copied to `D:\SecondBrainOS-backups`, newest 8 kept) but restoring from the D: copy has not been rehearsed. No OCR, no DOCX/PPTX extraction, no calendar, no voice.
-- Capture from iPhone share sheet (needs HTTPS PWA/Shortcut).
+- iPhone share-sheet capture is built (capture token + Shortcut, see README) and tested against the API, but the Shortcuts steps themselves have not been tried on a real iPhone. A PWA share target is not an option on iOS.
+- Drafts: unsent text is kept per device and survives reloads and a failed save. There is no offline queue: if the PC is unreachable the capture is not sent until you press Save again.
 
 ## Visual overhaul (done) and remaining visual work
 
@@ -28,6 +29,6 @@ Not done / not verified:
 
 1. Run an accessibility audit (axe or Lighthouse) and fix findings; re-check the redesign in Safari on the iPhone.
 2. Rehearse a restore from the D: copy; add an off-site or encrypted backup copy.
-3. iPhone share-sheet capture (needs an HTTPS Shortcut or PWA share target).
+3. Try the share-sheet Shortcut on the iPhone and fix its instructions where they differ; then consider an offline outbox.
 4. Optional: n8n or an internal scheduler for "process new captures" with an approval step; scheduled briefing.
 5. Optional: additional `LlmProvider` implementations (explicitly configured, cost disclosed); DOCX extraction library; OCR.

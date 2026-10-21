@@ -68,3 +68,67 @@ export const fmtDate = (iso: string | null | undefined): string => {
 
 /** Today on THIS device's calendar. Sent to the API so the phone and the PC agree on what is "today". */
 export const localToday = (): string => ymd();
+
+/**
+ * An unsent draft kept in this browser's localStorage, so a reload, a dropped connection or a switch of app on the
+ * phone does not lose what was typed. Restored after mount (never during render, so server and client markup match).
+ * `empty` must be a stable object (module constant). Storage can be unavailable; everything then just works without it.
+ */
+export function useDraft<T extends Record<string, string>>(key: string, empty: T, significant: (keyof T & string)[] = Object.keys(empty)) {
+  const [value, setValue] = useState<T>(empty);
+  const [restored, setRestored] = useState(false);
+  const [ready, setReady] = useState(false);
+  // A draft only counts when a "significant" field holds something (a changed dropdown alone is not worth restoring).
+  const sig = significant.join("|");
+  const blank = useCallback((v: T) => sig.split("|").every((k) => v[k].trim() === empty[k].trim()), [empty, sig]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<T>;
+        const next = { ...empty };
+        for (const k of Object.keys(empty)) if (typeof parsed[k] === "string") (next as Record<string, string>)[k] = parsed[k] as string;
+        if (!blank(next)) {
+          setValue(next);
+          setRestored(true);
+        }
+      }
+    } catch {
+      /* storage unavailable or corrupt: start empty */
+    }
+    setReady(true);
+  }, [key, empty, blank]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const t = setTimeout(() => {
+      try {
+        if (blank(value)) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify(value));
+      } catch {
+        /* ignore */
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [key, value, ready, blank]);
+
+  /** Forget the draft (after it was saved, or when the user discards it). */
+  const clear = useCallback(() => {
+    setValue(empty);
+    setRestored(false);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }, [key, empty]);
+
+  return { value, setValue, restored, dismissRestored: () => setRestored(false), clear };
+}
+
+/** What to tell the user when a save fails: a dropped connection keeps the draft, which is worth saying. */
+export const saveFailureMessage = (e: unknown): string => {
+  if (e instanceof ApiFailure && e.code === "network") return `${e.message} Your text is kept on this device.`;
+  return e instanceof Error ? e.message : "Could not save";
+};

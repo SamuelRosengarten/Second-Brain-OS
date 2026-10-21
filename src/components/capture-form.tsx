@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { api } from "./client";
+import { api, saveFailureMessage, useDraft } from "./client";
 import { Button, Field, Select, Textarea, Input, useToast, ErrorBox } from "./ui";
 import type { CreateCaptureResult } from "@/lib/captures";
 
@@ -14,11 +14,15 @@ const KINDS = [
   { v: "excerpt", l: "Pasted excerpt" },
 ];
 
+const EMPTY = { kind: "idea", content: "", url: "" };
+
 export function CaptureForm({ onSaved, compact }: { onSaved?: (r: CreateCaptureResult) => void; compact?: boolean }) {
   const toast = useToast();
-  const [kind, setKind] = useState("idea");
-  const [content, setContent] = useState("");
-  const [url, setUrl] = useState("");
+  const draft = useDraft("sbos-draft-capture", EMPTY, ["content", "url"]);
+  const { kind, content, url } = draft.value;
+  const setKind = (v: string) => draft.setValue((d) => ({ ...d, kind: v }));
+  const setContent = (v: string) => draft.setValue((d) => ({ ...d, content: v }));
+  const setUrl = (v: string) => draft.setValue((d) => ({ ...d, url: v }));
   const [files, setFiles] = useState<File[]>([]);
   const [process, setProcess] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -42,14 +46,14 @@ export function CaptureForm({ onSaved, compact }: { onSaved?: (r: CreateCaptureR
       setSaved(r);
       toast(r.duplicate ? "Already captured — showing the existing item" : process ? "Saved. AI processing started" : "Saved to inbox");
       if (!r.duplicate) {
-        setContent("");
-        setUrl("");
+        draft.clear();
+        setKind(kind); // keep the chosen type, as before
         setFiles([]);
         if (fileRef.current) fileRef.current.value = "";
       }
       onSaved?.(r);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(saveFailureMessage(err));
     } finally {
       setBusy(false);
     }
@@ -78,6 +82,12 @@ export function CaptureForm({ onSaved, compact }: { onSaved?: (r: CreateCaptureR
         <input type="checkbox" checked={process} onChange={(e) => setProcess(e.target.checked)} className="size-4 accent-[var(--accent)]" />
         Process with local AI after saving
       </label>
+      {draft.restored && (
+        <p className="text-sm text-muted">
+          Restored your unsent draft (attached files are not kept).{" "}
+          <button type="button" onClick={() => { draft.clear(); setFiles([]); }} className="text-accent hover:underline">Discard</button>
+        </p>
+      )}
       {error && <ErrorBox message={error} />}
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant="primary" loading={busy} disabled={!content.trim() && !url.trim() && !files.length}>

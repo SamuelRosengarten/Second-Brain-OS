@@ -264,3 +264,74 @@ test("installable on a home screen: manifest and icons are public and valid", as
   await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute("content", "Second Brain");
   await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
 });
+
+test("drafts: an unsent capture survives a reload and can be discarded", async ({ page }) => {
+  await login(page);
+  await page.getByLabel("Quick capture").fill("half-typed thought for later");
+  await page.waitForTimeout(600); // the draft is saved shortly after typing stops
+  await page.reload();
+  await expect(page.getByLabel("Quick capture")).toHaveValue("half-typed thought for later");
+  await expect(page.getByText("Restored your unsent draft.")).toBeVisible();
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByLabel("Quick capture")).toHaveValue("");
+  await page.reload();
+  await expect(page.getByLabel("Quick capture")).toHaveValue("");
+  await expect(page.getByText("Restored your unsent draft.")).toBeHidden();
+
+  // the full capture page keeps its own draft, and saving clears it
+  await page.goto("/capture");
+  await page.getByLabel("Capture content").fill("draft on the capture page");
+  await page.waitForTimeout(600);
+  await page.reload();
+  await expect(page.getByLabel("Capture content")).toHaveValue("draft on the capture page");
+  await page.getByRole("checkbox").uncheck();
+  await page.getByRole("button", { name: "Save capture" }).click();
+  await expect(page.getByRole("link", { name: /Open in inbox/ })).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.reload();
+  await expect(page.getByLabel("Capture content")).toHaveValue("");
+});
+
+test("a failed save keeps the draft", async ({ page }) => {
+  await login(page);
+  await page.route("**/api/captures", (route) => route.abort("connectionrefused"));
+  await page.getByLabel("Quick capture").fill("the PC is off right now");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText(/Your text is kept on this device/)).toBeVisible();
+  await expect(page.getByLabel("Quick capture")).toHaveValue("the PC is off right now");
+  await page.waitForTimeout(600);
+  await page.unroute("**/api/captures");
+  await page.reload();
+  await expect(page.getByLabel("Quick capture")).toHaveValue("the PC is off right now");
+});
+
+test("capture token: create in Settings, capture from a cookie-less client, then revoke", async ({ page, playwright, baseURL }) => {
+  await login(page);
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Create token" }).click();
+  const token = await page.getByLabel(/^Token/).inputValue();
+  expect(token).toMatch(/^sbos_cap_/);
+  expect(await page.getByLabel("Address to send captures to").inputValue()).toBe(`${baseURL}/api/captures`);
+
+  // a stand-alone client (like an iOS Shortcut): no cookie, no CSRF header, only the bearer token
+  const phone = await playwright.request.newContext({ baseURL });
+  const sent = await phone.post("/api/captures", { headers: { authorization: `Bearer ${token}` }, data: { content: "https://example.com/from-shortcut" } });
+  expect(sent.status()).toBe(201);
+  expect((await sent.json()).capture).toMatchObject({ kind: "link", url: "https://example.com/from-shortcut" });
+  expect((await phone.get("/api/captures", { headers: { authorization: `Bearer ${token}` } })).status()).toBe(401); // cannot read
+
+  await page.goto("/inbox");
+  await page.getByLabel("Search inbox").fill("from-shortcut");
+  await expect(page.locator("main ul li")).toHaveCount(1);
+
+  // after a reload the token is no longer shown, and revoking disables it
+  await page.goto("/settings");
+  await expect(page.getByText("token active")).toBeVisible();
+  await expect(page.getByLabel(/^Token/)).toHaveCount(0);
+  await page.getByRole("button", { name: "Revoke" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
+  await expect(page.getByText("no token")).toBeVisible();
+  const after = await phone.post("/api/captures", { headers: { authorization: `Bearer ${token}` }, data: { content: "should be refused" } });
+  expect(after.status()).toBe(401);
+  await phone.dispose();
+});

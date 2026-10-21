@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getConfig } from "./config.ts";
-import { isAuthenticated, isPasswordSet } from "./auth.ts";
+import { bearerToken, isAuthenticated, isPasswordSet, verifyCaptureToken } from "./auth.ts";
 import { log } from "./util.ts";
 
 export class ApiError extends Error {
@@ -37,7 +37,12 @@ export function assertSameOrigin(req: Request): void {
 }
 
 type Ctx<B> = { req: Request; body: B; params: Record<string, string>; url: URL };
-type Opts<S extends z.ZodType | undefined> = { public?: boolean; body?: S };
+type Opts<S extends z.ZodType | undefined> = {
+  public?: boolean;
+  body?: S;
+  /** Also accept the capture-only bearer token. Only for endpoints that create captures; everything else is cookie-only. */
+  captureToken?: boolean;
+};
 
 export function route<S extends z.ZodType | undefined = undefined>(
   opts: Opts<S>,
@@ -45,10 +50,14 @@ export function route<S extends z.ZodType | undefined = undefined>(
 ) {
   return async (req: Request, rc?: { params: Promise<Record<string, string>> }): Promise<Response> => {
     try {
-      assertSameOrigin(req);
+      // A bearer token is not an ambient credential (a browser never attaches it on its own), so it needs no CSRF header.
+      const viaToken = opts.captureToken ? bearerToken(req.headers.get("authorization")) : null;
+      if (viaToken === null) assertSameOrigin(req);
       if (!opts.public) {
         if (!isPasswordSet()) throw new ApiError(503, "No password configured. Run `npm run set-password`.", "setup_required");
-        if (!isAuthenticated(req.headers.get("cookie"))) throw new ApiError(401, "Not signed in", "unauthenticated");
+        if (viaToken !== null) {
+          if (!verifyCaptureToken(viaToken)) throw new ApiError(401, "Invalid or revoked capture token", "unauthenticated");
+        } else if (!isAuthenticated(req.headers.get("cookie"))) throw new ApiError(401, "Not signed in", "unauthenticated");
       }
       let body: unknown = undefined;
       if (opts.body) {

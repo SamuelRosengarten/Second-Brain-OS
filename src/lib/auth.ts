@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { getConfig, sessionSecretProblem } from "./config.ts";
-import { getSetting, setSetting } from "./db.ts";
+import { deleteSetting, getSetting, setSetting } from "./db.ts";
 
 export const SESSION_COOKIE = "sbos_session";
 const SESSION_TTL_S = 7 * 24 * 3600;
@@ -114,3 +114,44 @@ export function recordLoginFailure(key: string, now = Date.now()): void {
   else a.count++;
 }
 export const clearLoginFailures = (key: string): void => void attempts.delete(key);
+
+// --- capture token: a bearer credential that can ONLY create captures (for an iOS Shortcut) ---
+const CAPTURE_TOKEN_PREFIX = "sbos_cap_";
+
+/** HMAC under the session signing key, so changing the password or SBOS_SESSION_SECRET also revokes the token. */
+const captureTokenDigest = (token: string): string => crypto.createHmac("sha256", signingKey()).update(token).digest("hex");
+
+/** Creates (or replaces) the token. The plain value is returned once and never stored. */
+export function createCaptureToken(now = new Date()): { token: string; createdAt: string } {
+  const token = CAPTURE_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
+  setSetting("capture_token_digest", captureTokenDigest(token));
+  setSetting("capture_token_created", now.toISOString());
+  return { token, createdAt: now.toISOString() };
+}
+
+export function revokeCaptureToken(): void {
+  deleteSetting("capture_token_digest");
+  deleteSetting("capture_token_created");
+}
+
+export function captureTokenStatus(): { enabled: boolean; createdAt: string | null } {
+  return { enabled: getSetting("capture_token_digest") !== null, createdAt: getSetting("capture_token_created") };
+}
+
+export function verifyCaptureToken(token: string): boolean {
+  try {
+    const stored = getSetting("capture_token_digest");
+    if (!stored || !token.startsWith(CAPTURE_TOKEN_PREFIX)) return false;
+    const a = Buffer.from(captureTokenDigest(token), "hex");
+    const b = Buffer.from(stored, "hex");
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch {
+    return false; // no usable session secret
+  }
+}
+
+/** The credential from `Authorization: Bearer <token>`, or null when the header is absent or not a bearer. */
+export function bearerToken(header: string | null): string | null {
+  const m = /^Bearer\s+(\S+)$/i.exec(header ?? "");
+  return m ? m[1] : null;
+}

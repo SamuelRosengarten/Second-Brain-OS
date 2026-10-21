@@ -71,7 +71,10 @@ export async function createCapture(input: CreateCaptureInput): Promise<CreateCa
   const cfg = getConfig();
   const db = getDb();
   let content = (input.content ?? "").trim();
-  const url = (input.url ?? "").trim();
+  let url = (input.url ?? "").trim();
+  // Share sheets hand over either text or a bare link; treat a lone link as a link capture.
+  const loneLink = !input.kind && !url && !input.files?.length && /^https?:\/\/\S+$/i.test(content);
+  if (loneLink) url = content;
   if (url && !/^https?:\/\//i.test(url)) throw new ApiError(400, "URL must start with http:// or https://", "validation");
   const files = input.files ?? [];
   if (!content && !url && !files.length) throw new ApiError(400, "Nothing to capture: add text, a link or a file.", "validation");
@@ -98,7 +101,7 @@ export async function createCapture(input: CreateCaptureInput): Promise<CreateCa
   if (!content && prepared.length) content = `[Attached: ${prepared.map((p) => p.name).join(", ")}]`;
   if (!content) content = url;
 
-  const kind: CaptureKind = input.kind ?? (files.length ? "file" : url && !input.content ? "link" : "text");
+  const kind: CaptureKind = input.kind ?? (files.length ? "file" : loneLink || (url && !input.content) ? "link" : "text");
   const hash = contentHash(`${content}|${url}|${prepared.map((p) => sha256(p.data)).join(",")}`);
   const dup = db.prepare("SELECT * FROM captures WHERE content_hash = ? AND archived = 0 ORDER BY created_at DESC LIMIT 1").get(hash) as CaptureRow | undefined;
   if (dup) return { capture: hydrate(dup), duplicate: true };

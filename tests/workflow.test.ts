@@ -204,3 +204,16 @@ describe("projects, tasks, briefing", () => {
     expect(() => createTask({ title: "x", project_id: "nope" })).toThrow(/Unknown project/);
   });
 });
+
+describe("share-sheet style captures", () => {
+  it("treats a lone link as a link capture, but leaves text and explicit kinds alone", async () => {
+    const link = (await createCapture({ content: "  https://example.com/article?x=1  " })).capture;
+    expect(link).toMatchObject({ kind: "link", url: "https://example.com/article?x=1" });
+    const sentence = (await createCapture({ content: "Read https://example.com/b later" })).capture;
+    expect(sentence).toMatchObject({ kind: "text", url: "" });
+    const explicit = (await createCapture({ content: "https://example.com/c", kind: "excerpt" })).capture;
+    expect(explicit).toMatchObject({ kind: "excerpt", url: "" });
+    // the same link twice is still a duplicate
+    expect((await createCapture({ content: "https://example.com/article?x=1" })).duplicate).toBe(true);
+  });
+});

@@ -14,6 +14,7 @@ Scope: a single-user system on a home PC, reached from the same PC and from an i
 | CSRF | State-changing requests need header `x-sbos: 1` (cannot be sent cross-site without a CORS preflight) plus Origin check when present; allowed extra origins via `SBOS_ALLOWED_ORIGINS` | tests + smoke (cross-origin POST gets 403) |
 | Input validation | zod schemas at API boundaries; 2 MB JSON cap; upload cap `SBOS_MAX_UPLOAD_MB` | tests |
 | Filesystem safety | `sanitizeFilename`, `resolveInside` (rejects `..`, absolute, drive letters, UNC, NUL, escaping symlinks), temp-file + rename, never overwrite | `tests/safe-fs.test.ts` |
+| Capture token | Optional bearer token for an iOS Shortcut. Accepted only by `POST /api/captures` (everything else, including reading captures and managing the token, is cookie-only). 256-bit random, shown once, stored only as an HMAC under the session signing key, so replacing it, revoking it, changing the password or changing `SBOS_SESSION_SECRET` all disable it. No CSRF header is needed because a browser never attaches it by itself | `tests/capture-token.test.ts`, e2e |
 | Upload safety | Extension allowlist (md, txt, pdf, images) + magic-byte check; nothing is executed; downloads served as `application/octet-stream` with `CSP: sandbox` and `nosniff` | tests + smoke (`.exe` rejected) |
 | Output safety | Notes shown as plain text, search snippets split on markers and rendered as text nodes | code review |
 | Error hygiene | Unknown errors return a generic 500; logs are one-line JSON and never include note or capture content | test |
@@ -40,6 +41,8 @@ HTTPS matters for iOS features such as the clipboard API. Until you have done th
 
 ## Known limitations
 
+- The capture token is a long-lived secret stored in the Shortcut on the phone. Anyone who gets it can add items to your Inbox (not read anything), until you revoke it. Failed token attempts are not throttled; with 256 random bits guessing is not realistic, but the address is only reachable inside your tailnet anyway.
+- Unsent drafts are kept in the browser's local storage on that device, in plain text, and are not removed when you sign out.
 - Single user, single password, no MFA. Tailscale device approval is the real perimeter.
 - Login throttling is per process and resets on restart.
 - Data at rest is not encrypted by the app; use BitLocker for the disk and for backups copied elsewhere.

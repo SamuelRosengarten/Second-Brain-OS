@@ -2,14 +2,18 @@
 import Link from "next/link";
 import { ArrowUp } from "lucide-react";
 import { useState } from "react";
-import { api } from "./client";
+import { api, saveFailureMessage, useDraft } from "./client";
 import { Button, Kbd, useToast } from "./ui";
 import type { CreateCaptureResult } from "@/lib/captures";
+
+const EMPTY = { text: "" };
 
 /** Single-field capture for the dashboard. The note is saved first; AI processing is optional and separate. */
 export function QuickCapture({ onSaved }: { onSaved?: () => void }) {
   const toast = useToast();
-  const [text, setText] = useState("");
+  const draft = useDraft("sbos-draft-quick", EMPTY);
+  const text = draft.value.text;
+  const setText = (t: string) => draft.setValue({ text: t });
   const [process, setProcess] = useState(true);
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<CreateCaptureResult | null>(null);
@@ -24,11 +28,11 @@ export function QuickCapture({ onSaved }: { onSaved?: () => void }) {
         body: isUrl ? { kind: "link", url: content, content, process } : { kind: "idea", content, process },
       });
       setLast(r);
-      if (!r.duplicate) setText("");
+      if (!r.duplicate) draft.clear();
       toast(r.duplicate ? "Already captured" : process ? "Saved to inbox. Processing with local AI" : "Saved to inbox");
       onSaved?.();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not save", "danger");
+      toast(saveFailureMessage(e), "danger");
     } finally {
       setBusy(false);
     }
@@ -55,6 +59,12 @@ export function QuickCapture({ onSaved }: { onSaved?: () => void }) {
           <input type="checkbox" checked={process} onChange={(e) => setProcess(e.target.checked)} className="size-3.5 accent-[var(--accent)]" />
           Process with local AI
         </label>
+        {draft.restored && (
+          <span className="flex items-center gap-2">
+            Restored your unsent draft.
+            <button type="button" onClick={draft.clear} className="text-accent hover:underline">Discard</button>
+          </span>
+        )}
         {last && !last.duplicate && (
           <Link href={`/inbox/${last.capture.id}`} className="text-accent hover:underline">Open last capture</Link>
         )}

@@ -24,7 +24,8 @@ const JsonBody = z.object({
   process: z.boolean().optional(),
 });
 
-export const POST = route({}, async ({ req }) => {
+/** Also reachable with the capture-only bearer token (iOS Shortcut). */
+export const POST = route({ captureToken: true }, async ({ req }) => {
   const type = req.headers.get("content-type") ?? "";
   let input;
   if (type.startsWith("multipart/form-data")) {
