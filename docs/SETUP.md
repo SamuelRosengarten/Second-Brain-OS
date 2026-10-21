@@ -26,7 +26,21 @@ npm run build
 npm run start
 ```
 
-Open http://127.0.0.1:3000 and sign in. Stop with Ctrl+C. To keep it running after logout, create a Windows Task Scheduler task "At log on" that runs `npm run start` in this folder (do not run it as a public-facing service).
+Open http://127.0.0.1:3000 and sign in. Stop with Ctrl+C.
+
+### Auto-start at login (Windows Task Scheduler)
+
+A per-user task named `SecondBrainOS` runs `npm run start` hidden at login, restarts up to 3 times on failure, and appends output to `%USERPROFILE%\SecondBrainOS\server.log`. It does not run while you are logged out and never touches firewall or network settings.
+
+```powershell
+Start-ScheduledTask SecondBrainOS     # start now
+Stop-ScheduledTask SecondBrainOS      # stops the task, then also stop the node process on port 3000
+Get-NetTCPConnection -LocalPort 3000 -State Listen | % { Stop-Process -Id $_.OwningProcess -Force }
+Disable-ScheduledTask SecondBrainOS   # stop auto-starting
+Unregister-ScheduledTask SecondBrainOS -Confirm:$false   # remove it
+```
+
+After changing code or `.env.local`: stop the app as above, run `npm run build` if code changed, then `Start-ScheduledTask SecondBrainOS`. Do not also run `npm run start` by hand while the task is running (port conflict).
 
 ## 3. Verify
 
@@ -39,6 +53,8 @@ $env:SBOS_SMOKE_PASSWORD = "<your password>"; npm run smoke
 `smoke` creates test items prefixed `SMOKE`; prefer a scratch data dir (`$env:SBOS_DATA_DIR='C:\temp\sbos'` before running `set-password` and `start`). Set `SBOS_SMOKE_SKIP_AI=1` to skip the Ollama steps.
 
 ## 4. Backup and restore
+
+Scheduled weekly backups, the `--copy-to` / `--keep` options and the Task Scheduler commands are in the README ("Backups"). Browser tests: `npm run build` then `npm run e2e`.
 
 ```powershell
 npm run backup                      # folder in <data>/backups/backup-<time>

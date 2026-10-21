@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
@@ -15,6 +17,7 @@
     "restore": "node --experimental-strip-types scripts/restore.ts",
     "export": "node --experimental-strip-types scripts/backup.ts --export",
     "smoke": "node scripts/smoke.mjs",
+    "e2e": "playwright test",
     "audit": "npm audit --omit=dev"
   },
   "dependencies": {
@@ -26,6 +29,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.19.2",
@@ -37,4 +41,3 @@
     "vitest": "^5.0.5"
   }
 }
-

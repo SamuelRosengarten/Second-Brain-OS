@@ -34,6 +34,33 @@ function countFiles(dir: string): number {
   return n;
 }
 
+const BACKUP_NAME = /^backup-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/;
+
+/**
+ * Keep only the newest `keep` automatic backups in `dir`. Only folders that match the backup naming pattern AND
+ * contain manifest.json are ever considered; pre-restore-* safety copies and anything else are never touched.
+ */
+export function pruneBackups(dir: string, keep: number): string[] {
+  if (!fs.existsSync(dir) || keep < 1) return [];
+  const candidates = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && BACKUP_NAME.test(e.name) && fs.existsSync(path.join(dir, e.name, "manifest.json")))
+    .map((e) => e.name)
+    .sort(); // timestamp names sort chronologically
+  const doomed = candidates.slice(0, Math.max(0, candidates.length - keep));
+  for (const name of doomed) fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+  return doomed;
+}
+
+/** Copy a finished backup folder to another location (e.g. a second drive). Never overwrites an existing copy. */
+export function copyBackupTo(backupDir: string, destRoot: string): string {
+  const dest = path.join(path.resolve(destRoot), path.basename(backupDir));
+  if (fs.existsSync(dest)) throw new PathError(`"${dest}" already exists; refusing to overwrite.`);
+  fs.mkdirSync(path.resolve(destRoot), { recursive: true });
+  fs.cpSync(backupDir, dest, { recursive: true });
+  return dest;
+}
+
 export function listBackups(): { name: string; created: string }[] {
   const cfg = getConfig();
   if (!fs.existsSync(cfg.backupsDir)) return [];

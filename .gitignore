@@ -12,3 +12,5 @@ data/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+test-results/
+playwright-report/
