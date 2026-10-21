@@ -1,84 +1,131 @@
 "use client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { fmtDate, useApi } from "@/components/client";
-import { Badge, Button, Card, EmptyState, ErrorBox, Input, Loading, PageHeader, Select } from "@/components/ui";
+import { Archive, CircleCheck, Circle, Inbox as InboxIcon, LoaderCircle, PenLine, Search, Sparkles, TriangleAlert, X, type LucideIcon } from "lucide-react";
+import { Suspense, useMemo, useState } from "react";
+import { useApi } from "@/components/client";
+import { Badge, Button, EmptyState, ErrorBox, Input, ListSkeleton, PageHeader, rowClass, RowList, Tabs } from "@/components/ui";
 import type { Capture } from "@/lib/captures";
 
-const statusTone = (s: string) => (s === "failed" ? "danger" : s === "proposed" ? "accent" : s === "accepted" ? "ok" : s === "processing" ? "warn" : "neutral") as "danger" | "accent" | "ok" | "warn" | "neutral";
-const STATUS_LABEL: Record<string, string> = { new: "Unprocessed", processing: "Processing", proposed: "Needs review", accepted: "Saved", dismissed: "Dismissed", failed: "Failed" };
+type Filter = "all" | "proposed" | "new" | "processing" | "failed" | "accepted" | "dismissed";
+const LABEL: Record<Capture["status"], string> = { new: "Unprocessed", processing: "Processing", proposed: "Needs review", accepted: "Saved", dismissed: "Dismissed", failed: "Failed" };
+const ICON: Record<Capture["status"], { icon: LucideIcon; cls: string }> = {
+  new: { icon: Circle, cls: "text-faint" },
+  processing: { icon: LoaderCircle, cls: "text-warn animate-spin" },
+  proposed: { icon: Sparkles, cls: "text-accent" },
+  accepted: { icon: CircleCheck, cls: "text-ok" },
+  dismissed: { icon: X, cls: "text-faint" },
+  failed: { icon: TriangleAlert, cls: "text-danger" },
+};
+
+function ago(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 7 * 86400) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function InboxList() {
   const sp = useSearchParams();
-  const [status, setStatus] = useState(sp.get("status") ?? "");
+  const initial = sp.get("status");
+  const [filter, setFilter] = useState<Filter>((["proposed", "new", "failed", "accepted"].includes(initial ?? "") ? initial : "all") as Filter);
   const [q, setQ] = useState("");
-  const [debounced, setDebounced] = useState("");
   const [archived, setArchived] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(q), 250);
-    return () => clearTimeout(t);
-  }, [q]);
-  const qs = new URLSearchParams();
-  if (status) qs.set("status", status);
-  if (debounced) qs.set("q", debounced);
-  if (archived) qs.set("archived", "1");
-  const { data, error, loading, reload } = useApi<{ captures: Capture[] }>(`/api/captures?${qs}`);
-  const items = data?.captures ?? [];
+  const { data, error, loading, reload } = useApi<{ captures: Capture[] }>(`/api/captures${archived ? "?archived=1" : ""}`);
+  const all = data?.captures ?? [];
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: all.length };
+    for (const x of all) c[x.status] = (c[x.status] ?? 0) + 1;
+    return c;
+  }, [all]);
+  const items = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return all.filter((c) => (filter === "all" || c.status === filter) && (!term || `${c.content} ${c.url} ${c.proposal?.title ?? ""} ${c.proposal?.summary ?? ""} ${c.proposal?.tags.join(" ") ?? ""}`.toLowerCase().includes(term)));
+  }, [all, filter, q]);
+
+  const tabs: { id: Filter; label: string; count?: number }[] = [
+    { id: "all", label: "All", count: counts.all },
+    { id: "proposed", label: "Needs review", count: counts.proposed ?? 0 },
+    { id: "new", label: "Unprocessed", count: counts.new ?? 0 },
+    ...((counts.processing ?? 0) > 0 ? [{ id: "processing" as const, label: "Processing", count: counts.processing }] : []),
+    ...((counts.failed ?? 0) > 0 ? [{ id: "failed" as const, label: "Failed", count: counts.failed }] : []),
+    { id: "accepted", label: "Saved", count: counts.accepted ?? 0 },
+    ...((counts.dismissed ?? 0) > 0 ? [{ id: "dismissed" as const, label: "Dismissed", count: counts.dismissed }] : []),
+  ];
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Inbox" subtitle="Everything you capture lands here first." actions={<Link href="/capture"><Button variant="primary">New capture</Button></Link>} />
-      <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
-        <Input type="search" aria-label="Search inbox" placeholder="Search captures…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <Select aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {Object.entries(STATUS_LABEL).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </Select>
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} className="size-4 accent-[var(--accent)]" />
-          Archived
-        </label>
+      <PageHeader
+        title={archived ? "Inbox · Archived" : "Inbox"}
+        subtitle="Captures are saved before any AI runs. Review suggestions, then save them as notes."
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setArchived((a) => !a)} aria-pressed={archived}>
+              <Archive size={14} aria-hidden />
+              {archived ? "Back to inbox" : "Archived"}
+            </Button>
+            <Link href="/capture"><Button variant="primary"><PenLine size={14} aria-hidden />New capture</Button></Link>
+          </>
+        }
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Tabs label="Filter by status" value={filter} onChange={setFilter} tabs={tabs} />
+        <div className="relative min-w-48 flex-1 sm:max-w-64">
+          <Search size={14} aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-faint" />
+          <Input type="search" aria-label="Search inbox" placeholder="Filter captures…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+        </div>
       </div>
+
       {error && <ErrorBox message={error} onRetry={() => void reload()} />}
-      {loading && !data && <Loading />}
+      {loading && !data && <ListSkeleton />}
       {data && items.length === 0 && (
-        <EmptyState title={q || status || archived ? "No captures match" : "Your inbox is empty"} action={!q && !status && !archived ? <Link href="/capture"><Button variant="primary">Capture something</Button></Link> : undefined}>
-          {q || status || archived ? "Try clearing the filters." : "Capture an idea, link or document. It is saved immediately, then optionally organised by your local AI."}
+        <EmptyState
+          icon={InboxIcon}
+          title={q || filter !== "all" || archived ? "No captures match" : "Your inbox is empty"}
+          action={!q && filter === "all" && !archived ? <Link href="/capture"><Button variant="primary">Capture something</Button></Link> : undefined}
+        >
+          {q || filter !== "all" || archived ? "Try another filter or clear the search." : "Capture an idea, link or document. It is saved immediately, then optionally organised by your local AI."}
         </EmptyState>
       )}
-      <ul className="space-y-2">
-        {items.map((c) => (
-          <li key={c.id}>
-            <Link href={`/inbox/${c.id}`}>
-              <Card className="transition-colors hover:border-muted">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{c.proposal?.title ?? (c.content.replace(/\s+/g, " ").slice(0, 90) || "(empty)")}</p>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted">{c.proposal?.summary ?? c.content}</p>
+      {items.length > 0 && (
+        <RowList>
+          {items.map((c) => {
+            const { icon: Icon, cls } = ICON[c.status];
+            const title = c.proposal?.title ?? (c.content.replace(/\s+/g, " ").slice(0, 100) || "(empty)");
+            return (
+              <li key={c.id}>
+                <Link href={`/inbox/${c.id}`} className={`${rowClass} items-start`}>
+                  <Icon size={16} aria-label={LABEL[c.status]} role="img" className={`mt-0.5 shrink-0 ${cls}`} strokeWidth={1.75} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13.5px] font-medium">{title}</p>
+                    <p className="mt-0.5 line-clamp-1 text-[13px] text-muted">{c.proposal?.summary ?? c.content}</p>
+                    {c.status === "failed" && <p className="mt-0.5 line-clamp-1 text-xs text-danger">{c.error}</p>}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Badge>{c.kind.replace("_", " ")}</Badge>
+                      {c.attachments.length > 0 && <Badge>{c.attachments.length} file{c.attachments.length > 1 ? "s" : ""}</Badge>}
+                      {c.proposal?.tags.slice(0, 3).map((t) => <span key={t} className="text-xs text-faint">#{t}</span>)}
+                    </div>
                   </div>
-                  <Badge tone={statusTone(c.status)}>{STATUS_LABEL[c.status]}</Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                  <span>{fmtDate(c.created_at)}</span>
-                  <Badge>{c.kind.replace("_", " ")}</Badge>
-                  {c.attachments.length > 0 && <Badge>{c.attachments.length} file{c.attachments.length > 1 ? "s" : ""}</Badge>}
-                  {c.proposal?.tags.slice(0, 4).map((t) => <Badge key={t} tone="accent">#{t}</Badge>)}
-                </div>
-              </Card>
-            </Link>
-          </li>
-        ))}
-      </ul>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="tnum text-xs text-faint">{ago(c.created_at)}</span>
+                    {c.status === "proposed" && <Badge tone="accent">Review</Badge>}
+                    {c.status === "failed" && <Badge tone="danger">Retry</Badge>}
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </RowList>
+      )}
     </div>
   );
 }
 
 export default function InboxPage() {
   return (
-    <Suspense fallback={<Loading />}>
+    <Suspense fallback={<ListSkeleton />}>
       <InboxList />
     </Suspense>
   );

@@ -6,7 +6,8 @@ async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByLabel("Quick capture")).toBeVisible();
 }
 
 test.describe.configure({ mode: "serial" });
@@ -64,7 +65,7 @@ test("duplicate captures are not stored twice", async ({ page }) => {
   }
   await page.goto("/inbox");
   await page.getByLabel("Search inbox").fill("Exactly the same thought");
-  await expect(page.locator("ul li")).toHaveCount(1);
+  await expect(page.locator("main ul li")).toHaveCount(1);
 });
 
 test("projects: create, add task, link note, briefing", async ({ page }) => {
@@ -73,13 +74,13 @@ test("projects: create, add task, link note, briefing", async ({ page }) => {
   await page.getByRole("button", { name: "New project" }).first().click();
   await page.getByLabel("Name").fill("E2E Garden");
   await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.getByRole("link", { name: /E2E Garden/ }).click();
+  await page.locator("main").getByRole("link", { name: /E2E Garden/ }).click();
   await page.getByLabel("New task title").fill("Water seedlings");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Water seedlings", { exact: true })).toBeVisible();
   await page.getByLabel("Note to link").selectOption({ label: "E2E tomato garden" });
   await page.getByRole("button", { name: "Link", exact: true }).click();
-  await expect(page.getByRole("link", { name: "E2E tomato garden" })).toBeVisible();
+  await expect(page.locator("main").getByRole("link", { name: "E2E tomato garden" })).toBeVisible();
   await page.goto("/");
   await expect(page.getByText("Calendar events are not shown: no calendar is connected.")).toBeVisible();
 });
@@ -130,4 +131,45 @@ test("settings, automations and backup work; sign out ends the session", async (
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/inbox");
   await expect(page).toHaveURL(/\/login$/);
+});
+
+test("command palette: Ctrl+K opens, filters, navigates with the keyboard and closes with Escape", async ({ page }) => {
+  await login(page);
+  await page.keyboard.press("Control+k");
+  const input = page.getByRole("combobox", { name: "Search commands and notes" });
+  await expect(input).toBeFocused();
+  await input.fill("tasks");
+  await expect(page.getByRole("option", { name: /Tasks/ }).first()).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/tasks$/);
+  await page.keyboard.press("Control+k");
+  await expect(input).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(input).toBeHidden();
+  // live note results come from the real library
+  await page.keyboard.press("Control+k");
+  await input.fill("tomato");
+  await expect(page.getByRole("option", { name: /E2E tomato garden/ })).toBeVisible();
+  await page.getByRole("option", { name: /E2E tomato garden/ }).click();
+  await expect(page).toHaveURL(/\/knowledge\/.+/);
+});
+
+test("note editor: write, safe Markdown preview, save, and rendered view", async ({ page }) => {
+  await login(page);
+  await page.goto("/knowledge?new=1");
+  await page.getByLabel("Title").fill("Editor test note");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page).toHaveURL(/\/knowledge\/.+/);
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Note body (Markdown)").fill(["## Plan", "", "- **bold item**", "- [bad](javascript:alert(1))", "", "<script>window.__pwned = 1</script>"].join(String.fromCharCode(10)));
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(page.getByRole("heading", { name: "Plan" })).toBeVisible();
+  await expect(page.locator(".md strong")).toHaveText("bold item");
+  await expect(page.locator('.md a[href^="javascript"]')).toHaveCount(0);
+  await expect(page.getByText("<script>window.__pwned = 1</script>")).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
+  await page.keyboard.press("Control+s");
+  await expect(page.getByText("Note saved")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.locator(".md h2")).toHaveText("Plan");
 });

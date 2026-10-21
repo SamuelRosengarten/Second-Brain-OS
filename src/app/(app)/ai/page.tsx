@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Send, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiFailure, useApi } from "@/components/client";
 import { Badge, Button, Card, CardTitle, ConfirmDialog, EmptyState, ErrorBox, Field, Input, PageHeader, Select, Tabs, Textarea, useToast } from "@/components/ui";
@@ -39,6 +40,11 @@ function Chat() {
   const [busy, setBusy] = useState(false);
   const [delId, setDelId] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
+  // prefill from the command palette ("Ask AI: …"); the user still presses Send
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setInput(q);
+  }, []);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -117,7 +123,7 @@ function Chat() {
           {convs.data?.conversations.map((c) => (
             <li key={c.id} className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm ${c.id === convId ? "bg-surface2" : "hover:bg-surface"}`}>
               <button onClick={() => void open(c.id)} className="min-w-0 flex-1 truncate text-left">{c.title}</button>
-              <button aria-label={`Delete conversation ${c.title}`} onClick={() => setDelId(c.id)} className="text-muted hover:text-danger">✕</button>
+              <button aria-label={`Delete conversation ${c.title}`} onClick={() => setDelId(c.id)} className="text-faint hover:text-danger"><X size={14} aria-hidden /></button>
             </li>
           ))}
           {convs.data?.conversations.length === 0 && <li className="px-2 text-xs text-muted">No conversations yet.</li>}
@@ -154,7 +160,7 @@ function Chat() {
 
         <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex gap-2">
           <Textarea aria-label="Message" rows={2} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} placeholder="Ask a question…  (Enter to send, Shift+Enter for a new line)" className="min-h-0" />
-          {busy ? <Button onClick={() => abort.current?.abort()}>Stop</Button> : <Button type="submit" variant="primary" disabled={!input.trim()}>Send</Button>}
+          {busy ? <Button onClick={() => abort.current?.abort()}><Square size={13} aria-hidden />Stop</Button> : <Button type="submit" variant="primary" disabled={!input.trim()}><Send size={13} aria-hidden />Send</Button>}
         </form>
       </div>
 

@@ -1,32 +1,34 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/ui";
+import { ChevronRight, FileText, FolderKanban, ListTodo, Settings, Sparkles, Workflow } from "lucide-react";
+import { PageHeader, RowList, rowClass } from "@/components/ui";
 
 const ITEMS = [
-  { href: "/knowledge", label: "Knowledge", note: "Notes, import and search" },
-  { href: "/projects", label: "Projects", note: "Goals, tasks and linked notes" },
-  { href: "/tasks", label: "Tasks", note: "Everything to do" },
-  { href: "/ai", label: "AI Workspace", note: "Local chat and Claude handoff" },
-  { href: "/automations", label: "Automations", note: "Manual jobs and run history" },
-  { href: "/settings", label: "Settings", note: "Models, backup, theme, sign out" },
+  { href: "/knowledge", label: "Notes", note: "Your Markdown library, import and search", icon: FileText },
+  { href: "/tasks", label: "Tasks", note: "Everything to do", icon: ListTodo },
+  { href: "/projects", label: "Projects", note: "Goals, tasks and linked notes", icon: FolderKanban },
+  { href: "/ai", label: "Ask AI", note: "Local chat and Claude handoff", icon: Sparkles },
+  { href: "/automations", label: "Automations", note: "Manual jobs and run history", icon: Workflow },
+  { href: "/settings", label: "Settings", note: "Models, backup, theme, sign out", icon: Settings },
 ];
 
 export default function MorePage() {
   return (
     <div className="mx-auto max-w-lg">
       <PageHeader title="More" />
-      <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+      <RowList>
         {ITEMS.map((i) => (
           <li key={i.href}>
-            <Link href={i.href} className="flex items-center justify-between px-4 py-3.5 hover:bg-surface2">
-              <span>
-                <span className="block font-medium">{i.label}</span>
-                <span className="text-xs text-muted">{i.note}</span>
+            <Link href={i.href} className={`${rowClass} min-h-14`}>
+              <i.icon size={18} aria-hidden strokeWidth={1.75} className="shrink-0 text-faint" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">{i.label}</span>
+                <span className="block text-xs text-faint">{i.note}</span>
               </span>
-              <span aria-hidden className="text-muted">›</span>
+              <ChevronRight size={16} aria-hidden className="text-faint" />
             </Link>
           </li>
         ))}
-      </ul>
+      </RowList>
     </div>
   );
 }

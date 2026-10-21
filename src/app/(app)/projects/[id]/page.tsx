@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, fmtDate, useApi } from "@/components/client";
 import { NewTask, TaskRow } from "@/components/task-list";
@@ -97,7 +98,7 @@ export default function ProjectDetail() {
         {data.tasks.length === 0 ? <p className="mt-3 text-sm text-muted">No tasks yet.</p> : <ul className="mt-2 divide-y divide-line">{data.tasks.map((t) => <TaskRow key={t.id} task={t} onChange={() => void reload()} />)}</ul>}
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardTitle>Related notes</CardTitle>
           {data.notes.length === 0 && <p className="mb-3 text-sm text-muted">No linked notes.</p>}
@@ -105,7 +106,7 @@ export default function ProjectDetail() {
             {data.notes.map((n) => (
               <li key={n.id} className="flex items-center justify-between gap-2 text-sm">
                 <Link href={`/knowledge/${n.id}`} className="truncate hover:text-accent">{n.title}</Link>
-                <button aria-label={`Unlink ${n.title}`} onClick={() => void noteLink(n.id, "unlink")} className="text-muted hover:text-danger">×</button>
+                <button aria-label={`Unlink ${n.title}`} onClick={() => void noteLink(n.id, "unlink")} className="text-faint hover:text-danger"><X size={14} aria-hidden /></button>
               </li>
             ))}
           </ul>

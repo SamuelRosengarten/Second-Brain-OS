@@ -32,7 +32,7 @@ export default function AutomationsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader title="Automations" subtitle="Small, fixed jobs you start yourself. No scheduled or autonomous actions in this release." />
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         {JOBS.map((j) => (
           <Card key={j.id} className="flex flex-col">
             <h2 className="font-medium">{j.name}</h2>

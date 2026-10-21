@@ -94,11 +94,21 @@ A copy on the same physical disk does not protect against disk failure; use a di
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | 51 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat |
+| `npm test` | 55 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat, safe Markdown rendering |
 | `npm run typecheck` | TypeScript |
-| `npm run build` then `npm run e2e` | 8 Playwright browser tests (desktop + phone viewport) on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, phone layout without horizontal scroll |
+| `npm run build` then `npm run e2e` | 13 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus. Screenshots are saved to `test-results/shots/` |
 | `npm run smoke` | HTTP end-to-end against a running instance, with real Ollama (see docs/SETUP.md) |
 | `npm run audit` | Dependency audit |
+
+## Interface
+
+Dark-first (light theme follows the OS or Settings), compact, one icon set (lucide). Violet accent is reserved for active navigation, primary actions, focus and AI-generated content.
+
+- **Ctrl+K (⌘K)** command palette: jump to any page, create a capture/note/task/project, open a project, find notes by title, or run a full library search / Ask AI. Every entry is a real action.
+- **Sidebar** (desktop, 1024px and up): New capture, search, navigation, your active projects and recent notes (real data), live Ollama status, collapsible. Below 1024px (phones and tablets) it becomes a top bar plus a bottom nav with a raised Capture button.
+- **Home** shows the date's greeting, a one-box quick capture, the briefing computed from your database, today's tasks, items awaiting review, recent notes, active projects and system status. Nothing on it is fabricated.
+- **Inbox** is a status-filtered list; each capture shows your original beside the clearly labelled, editable AI suggestion.
+- **Notes** read like pages (properties, summary, rendered Markdown) and edit with Write/Preview and Ctrl+S. Markdown is rendered by a small built-in renderer that never injects raw HTML and only links http(s)/mailto.
 
 ## What is in it
 
