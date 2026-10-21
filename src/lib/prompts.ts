@@ -57,18 +57,30 @@ export function buildCaptureMessages(input: { kind: string; content: string; url
 export const DEFAULT_CHAT_SYSTEM_PROMPT =
   "You are the assistant inside Second Brain OS, a private personal knowledge system. Be concise and honest. Distinguish facts from your own inferences. If you do not know something, say so.";
 
-export function groundedSystemPrompt(base: string, passages: { n: number; title: string; heading: string; text: string }[]): string {
-  if (!passages.length) {
-    return `${base}
+export function groundedSystemPrompt(
+  base: string,
+  passages: { n: number; title: string; heading: string; text: string }[],
+  workspace = "",
+  today = "",
+): string {
+  const ws = workspace
+    ? `
 
-The user asked a question about their library but NO relevant passages were retrieved. Say clearly that the library does not appear to contain enough evidence, and do not answer from invented library content. You may offer general knowledge only if you label it as not coming from their notes.`;
+WORKSPACE (the user's live projects and tasks, read from their database${today ? `; today is ${today}` : ""}). This is authoritative for questions about projects, tasks, statuses, priorities and due dates; no citation is needed for it. "In progress" means status "in progress". If a project or task the user asks about is not listed here, say it is not in their workspace.
+
+${workspace}`
+    : "";
+  if (!passages.length) {
+    return `${base}${ws}
+
+${workspace ? "No note passages were retrieved for this question. Answer project and task questions from the WORKSPACE above. If the question is about note content instead, say clearly that the library does not appear to contain enough evidence, and do not answer from invented library content." : "The user asked a question about their library but NO relevant passages were retrieved. Say clearly that the library does not appear to contain enough evidence, and do not answer from invented library content."} You may offer general knowledge only if you label it as not coming from their notes.`;
   }
   const ctx = passages
     .map((p) => `[${p.n}] "${p.title}"${p.heading ? ` › ${p.heading}` : ""}\n${p.text}`)
     .join("\n\n");
-  return `${base}
+  return `${base}${ws}
 
-Answer using ONLY the numbered library passages below. Cite the passages you rely on inline like [1] or [2][3]. If the passages do not contain enough evidence to answer, say so plainly instead of guessing. Do not cite a passage you did not use, and never claim to have searched anything beyond these passages.
+For questions about their notes, answer using ONLY the numbered library passages below. Cite the passages you rely on inline like [1] or [2][3]. If the passages do not contain enough evidence to answer, say so plainly instead of guessing${workspace ? " (project and task questions are answered from the WORKSPACE instead, without citations)" : ""}. Do not cite a passage you did not use, and never claim to have searched anything beyond these passages${workspace ? " and the WORKSPACE" : ""}.
 
 LIBRARY PASSAGES:
 ${ctx}`;

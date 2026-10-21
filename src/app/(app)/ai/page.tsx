@@ -6,12 +6,13 @@ import { api, ApiFailure, useApi } from "@/components/client";
 import { Badge, Button, Card, CardTitle, ConfirmDialog, EmptyState, ErrorBox, Field, Input, PageHeader, Select, Tabs, Textarea, useToast } from "@/components/ui";
 import type { Source, StoredMessage } from "@/lib/chat";
 
-interface Msg { role: "user" | "assistant"; content: string; sources?: Source[] | null; grounded?: boolean; error?: { message: string; hint?: string } }
+interface Msg { role: "user" | "assistant"; content: string; sources?: Source[] | null; grounded?: boolean; workspace?: { projects: number; tasks: number }; error?: { message: string; hint?: string } }
 interface ModelsResp { ok: boolean; selected: string; models: { name: string; sizeBytes: number }[]; error?: string; hint?: string }
 interface Conv { id: string; title: string; model: string; updated_at: string }
 
-function Sources({ sources }: { sources: Source[] }) {
-  if (!sources.length) return <p className="mt-2 text-xs text-warn">No library passages were retrieved for this question.</p>;
+function Sources({ sources, workspace }: { sources: Source[]; workspace?: { projects: number; tasks: number } }) {
+  const ws = workspace && (workspace.projects || workspace.tasks);
+  if (!sources.length) return ws ? <p className="mt-2 text-xs text-muted">No note passages matched; this answer can only draw on your projects and tasks.</p> : <p className="mt-2 text-xs text-warn">No library passages were retrieved for this question.</p>;
   return (
     <details className="mt-2 text-xs">
       <summary className="cursor-pointer text-muted">Used {sources.length} library passage{sources.length > 1 ? "s" : ""}</summary>
@@ -97,10 +98,10 @@ function Chat() {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
           if (!line) continue;
-          const ev = JSON.parse(line) as { type: string; text?: string; conversationId?: string; sources?: Source[]; grounded?: boolean; message?: string; hint?: string };
+          const ev = JSON.parse(line) as { type: string; text?: string; conversationId?: string; sources?: Source[]; grounded?: boolean; workspace?: { projects: number; tasks: number }; message?: string; hint?: string };
           if (ev.type === "meta") {
             setConvId(ev.conversationId);
-            patchLast((m) => ({ ...m, sources: ev.sources, grounded: ev.grounded }));
+            patchLast((m) => ({ ...m, sources: ev.sources, grounded: ev.grounded, workspace: ev.workspace }));
           } else if (ev.type === "delta") patchLast((m) => ({ ...m, content: m.content + (ev.text ?? "") }));
           else if (ev.type === "error") patchLast((m) => ({ ...m, error: { message: ev.message ?? "Error", hint: ev.hint } }));
         }
@@ -146,12 +147,12 @@ function Chat() {
         </div>
 
         <Card className="min-h-80 space-y-4">
-          {msgs.length === 0 && <EmptyState title="Ask anything">{useLibrary ? "Answers are grounded in passages retrieved from your notes, with citations. If nothing relevant is found, the assistant says so." : "Library is off: this is a plain chat with the local model. Nothing from your notes is used."}</EmptyState>}
+          {msgs.length === 0 && <EmptyState title="Ask anything">{useLibrary ? "Answers are grounded in passages retrieved from your notes (with citations) and in your live projects and tasks. If nothing relevant is found, the assistant says so." : "Library is off: this is a plain chat with the local model. Nothing from your notes is used."}</EmptyState>}
           {msgs.map((m, i) => (
             <div key={i} className={m.role === "user" ? "ml-auto max-w-[85%] rounded-xl bg-accent/15 px-4 py-2.5 text-sm" : "max-w-full text-sm"}>
-              {m.role === "assistant" && m.grounded && <div className="mb-1"><Badge tone="accent">Uses your library</Badge></div>}
+              {m.role === "assistant" && m.grounded && <div className="mb-1"><Badge tone="accent">{m.workspace ? "Uses your library, projects and tasks" : "Uses your library"}</Badge></div>}
               <p className="whitespace-pre-wrap">{m.content || (busy && i === msgs.length - 1 && !m.error ? "…" : "")}</p>
-              {m.role === "assistant" && m.grounded && m.sources && <Sources sources={m.sources} />}
+              {m.role === "assistant" && m.grounded && m.sources && <Sources sources={m.sources} workspace={m.workspace} />}
               {m.error && <div className="mt-2"><ErrorBox message={m.error.message} hint={m.error.hint} /></div>}
             </div>
           ))}

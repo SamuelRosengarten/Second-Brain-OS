@@ -125,7 +125,7 @@ export class OllamaProvider implements LlmProvider {
   }
 
   async *chatStream(model: string, messages: ChatMessage[], signal?: AbortSignal): AsyncGenerator<string> {
-    const res = await this.chatRequest({ model, messages, stream: true }, model, signal);
+    const res = await this.chatRequest({ model, messages, stream: true, options: { num_ctx: 8192 } }, model, signal); // the default window (often 4096) would silently cut off notes + workspace + history
     if (!res.body) throw new OllamaError("bad_response", "Ollama returned no stream.");
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

@@ -4,6 +4,8 @@ import { ApiError } from "./api.ts";
 import { getProvider, OllamaError, type ChatMessage } from "./ollama.ts";
 import { DEFAULT_CHAT_SYSTEM_PROMPT, groundedSystemPrompt } from "./prompts.ts";
 import { search } from "./search.ts";
+import { buildWorkspaceContext } from "./workspace-context.ts";
+import { ymd } from "./dates.ts";
 import { log, newId, nowIso } from "./util.ts";
 
 export interface Source { n: number; noteId: string; title: string; heading: string; path: string; chunkIndex: number; text: string }
@@ -70,13 +72,15 @@ export function chatStream(req: ChatRequest, signal?: AbortSignal): ReadableStre
     async start(controller) {
       let answer = "";
       let sources: Source[] = [];
+      let workspace = { text: "", projects: 0, tasks: 0 };
       try {
         if (req.useLibrary) {
           const res = await search(req.message, { limit: 6, noteIds: req.noteIds });
           sources = res.hits.map((h, i) => ({
             n: i + 1, noteId: h.noteId, title: h.title, heading: h.heading, path: h.path, chunkIndex: h.chunkIndex, text: h.text.slice(0, 1500),
           }));
-          controller.enqueue(line({ type: "meta", conversationId, grounded: true, sources, semantic: res.semantic, model }));
+          workspace = buildWorkspaceContext(req.message);
+          controller.enqueue(line({ type: "meta", conversationId, grounded: true, sources, semantic: res.semantic, model, workspace: { projects: workspace.projects, tasks: workspace.tasks } }));
         } else {
           controller.enqueue(line({ type: "meta", conversationId, grounded: false, sources: [], model }));
         }
@@ -84,7 +88,7 @@ export function chatStream(req: ChatRequest, signal?: AbortSignal): ReadableStre
           .prepare("SELECT role, content FROM messages WHERE conversation_id = ? AND role <> 'system' ORDER BY id DESC LIMIT 20")
           .all(conversationId) as ChatMessage[];
         history.reverse();
-        const system = req.useLibrary ? groundedSystemPrompt(getSystemPrompt(), sources) : getSystemPrompt();
+        const system = req.useLibrary ? groundedSystemPrompt(getSystemPrompt(), sources, workspace.text, ymd()) : getSystemPrompt();
         const messages: ChatMessage[] = [{ role: "system", content: system }, ...history];
         for await (const delta of getProvider().chatStream(model, messages, signal)) {
           answer += delta;
