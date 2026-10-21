@@ -44,7 +44,13 @@ http
     if (req.url === "/api/show") return json({ capabilities: ["completion"] });
     if (req.url === "/api/embed") return json({ embeddings: (body.input ?? []).map(vec) });
     if (req.url === "/api/chat") {
-      if (body.stream === false) return json({ message: { role: "assistant", content: JSON.stringify(proposal) } });
+      if (body.stream === false) {
+        const sys = body.messages?.[0]?.content ?? "";
+        // Dependency suggestions: always propose T1 before T2 with a reason; task suggestions: two plain tasks.
+        if (sys.includes("hidden ordering between tasks")) return json({ message: { role: "assistant", content: JSON.stringify({ links: [{ first: "T1", then: "T2", confidence: 88, reason: "The second task needs the first one's result." }, { first: "T3", then: "T4", confidence: 55, reason: "Weak hint only." }] }) } });
+        if (sys.includes("plan work in their personal task system")) return json({ message: { role: "assistant", content: JSON.stringify({ tasks: [{ title: "Draft the outline", description: "", priority: "high", due_date: "", project: "" }, { title: "Review the draft", description: "", priority: "medium", due_date: "", project: "" }] }) } });
+        return json({ message: { role: "assistant", content: JSON.stringify(proposal) } });
+      }
       const system = body.messages?.[0]?.content ?? "";
       const grounded = system.includes("LIBRARY PASSAGES");
       const text = grounded ? "Based on your notes, buy cedar boards [1]." : "Plain local reply.";

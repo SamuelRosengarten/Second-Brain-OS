@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WIDTHS = [375, 390, 430, 768, 1024, 1440];
-const PAGES = ["/", "/inbox", "/capture", "/knowledge", "/projects", "/pipeline", "/tasks", "/ai", "/automations", "/settings", "/more"];
+const PAGES = ["/", "/inbox", "/capture", "/knowledge", "/projects", "/workflow", "/tasks", "/ai", "/automations", "/settings", "/more"];
 const SHOTS = path.join("test-results", "shots");
 
 async function login(page: Page) {

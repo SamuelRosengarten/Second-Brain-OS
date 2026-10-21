@@ -51,16 +51,19 @@ for (const theme of ["dark", "light"] as const) {
 
     const ids = await seed(page);
     const paths = ["/", "/capture", "/capture?title=Shared&text=https://example.com/x", "/inbox", `/inbox/${ids.capture}`, "/knowledge", `/knowledge/${ids.note}`,
-      "/projects", `/projects/${ids.project}`, "/pipeline", "/tasks", "/ai", "/search?q=sample", "/settings", "/automations", "/more"];
+      "/projects", `/projects/${ids.project}`, "/workflow", "/tasks", "/ai", "/search?q=sample", "/settings", "/automations", "/more"];
     for (const p of paths) {
       await page.goto(p);
       await scan(page, `${p} (${theme})`, found);
     }
 
     // pipeline: the second view, the task dialog opened from a marker, the AI suggestion dialog and the trash panel
-    await page.goto("/pipeline");
-    await page.getByRole("tab", { name: "By due date" }).click();
-    await scan(page, `/pipeline by due date (${theme})`, found);
+    await page.goto("/workflow");
+    await page.getByRole("button", { name: "Graph" }).click();
+    await page.waitForLoadState("networkidle");
+    await scan(page, `/workflow graph (${theme})`, found);
+    await page.getByRole("button", { name: "Critical path" }).click();
+    await scan(page, `/workflow critical path (${theme})`, found);
     await page.goto("/ai");
     await page.getByRole("button", { name: "Suggest tasks" }).click();
     await expect(page.getByRole("dialog", { name: "Suggest tasks" })).toBeVisible();

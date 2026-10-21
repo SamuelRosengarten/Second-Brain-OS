@@ -25,6 +25,8 @@ Browser (desktop / iPhone)  ->  Next.js (127.0.0.1:3000)  ->  src/lib/*  ->  SQL
 | `ollama.ts` | `LlmProvider` interface + Ollama implementation (health, models, capabilities, stream, JSON, embed) |
 | `prompts.ts` | Capture prompt, proposal schema (zod -> JSON schema for Ollama `format`), grounded-chat prompt, idea-to-note template |
 | `captures.ts` | Save-first capture pipeline, processing, accept, attachments |
+| `workflow.ts` | Task dependencies (loop-safe), AI-suggested dependencies stored as pending proposals, and the one-call data set behind the Workflow page |
+| `workflow-logic.ts` | Pure functions shared with the browser: task status, critical path, timeline grid and graph layout |
 | `projects.ts` | Projects, tasks, note links, activity |
 | `chat.ts` | Conversations, retrieval-grounded streaming (NDJSON) |
 | `briefing.ts` | Deterministic briefing from SQL |

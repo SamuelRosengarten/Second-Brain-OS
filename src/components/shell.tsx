@@ -14,7 +14,7 @@ const PRIMARY: NavItem[] = [
   { href: "/knowledge", label: "Notes", icon: FileText },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/pipeline", label: "Pipeline", icon: Waypoints },
+  { href: "/workflow", label: "Workflow", icon: Waypoints },
   { href: "/ai", label: "Ask AI", icon: Sparkles },
   { href: "/automations", label: "Automations", icon: Workflow },
 ];

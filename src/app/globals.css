@@ -311,3 +311,52 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+  Workflow page palette. Dark values are the design's own colors; light values are the same roles, darkened to keep 4.5:1 text contrast.
+  Project colors (--wf-p0..7) are assigned by project order and used for dots, borders and tinted chips.
+*/
+:root {
+  --wf-panel: #0d0e12; --wf-line: #1b1d23; --wf-line2: #1d1f26; --wf-grid: #17191f; --wf-dots: #1f212a;
+  --wf-text: #e8e9ef; --wf-strong: #eceef5; --wf-muted: #8e92a0; --wf-soft: #c3c6d0;
+  --wf-acc: #b4a8ff; --wf-sug: #9d8cf0; --wf-bad: #ff6b5e; --wf-dep: #6f7488; --wf-link: #555a6e; --wf-edge: #2d3040;
+  --wf-btn: #15161d; --wf-btnline: #262833; --wf-seg: #23243a; --wf-segline: #34365a; --wf-primary: #6d5fc4; --wf-sugline: #2c2850;
+  --wf-today-line: #4b4390; --wf-today-bg: rgba(124, 108, 217, 0.07); --wf-weekend: rgba(255, 255, 255, 0.018);
+  --wf-load1: #1d1f29; --wf-load2: #2a2c42; --wf-load3: #4a3f8a;
+  --wf-ready: #7ee0a6; --wf-ready-bg: rgba(126, 224, 166, 0.14);
+  --wf-block: #b4b8c6; --wf-block-bg: rgba(255, 255, 255, 0.08);
+  --wf-late: #ff9488; --wf-late-bg: rgba(255, 107, 94, 0.16);
+  --wf-done: #8e92a0; --wf-done-bg: rgba(255, 255, 255, 0.06);
+  --wf-p0: #6cb4ff; --wf-p1: #9ccf6a; --wf-p2: #f4b455; --wf-p3: #b4a4ff; --wf-p4: #ff8fb1; --wf-p5: #5ed6c8; --wf-p6: #ff9f7a; --wf-p7: #c8c1a0;
+  --wf-note: #868a98; --wf-tag: #a9adbb; --wf-cap: #9aa0b4; --wf-crit: #ffffff;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --wf-panel: #ffffff; --wf-line: #dce0e6; --wf-line2: #e6e9ee; --wf-grid: #e6e9ee; --wf-dots: #dfe3e9;
+    --wf-text: #14171c; --wf-strong: #0d1016; --wf-muted: #4a5361; --wf-soft: #2f3744;
+    --wf-acc: #5b3bc4; --wf-sug: #6a4fd0; --wf-bad: #ab2530; --wf-dep: #6b7385; --wf-link: #8a91a3; --wf-edge: #cdd2db;
+    --wf-btn: #f1f3f6; --wf-btnline: #cfd4dc; --wf-seg: #e9e6fb; --wf-segline: #c9c1f3; --wf-primary: #5b3bc4; --wf-sugline: #cfc6f5;
+    --wf-today-line: #b3a8ec; --wf-today-bg: rgba(91, 59, 196, 0.06); --wf-weekend: rgba(0, 0, 0, 0.025);
+    --wf-load1: #eceef3; --wf-load2: #dcdcf3; --wf-load3: #c5baf2;
+    --wf-ready: #0d6444; --wf-ready-bg: rgba(13, 100, 68, 0.12);
+    --wf-block: #4a5361; --wf-block-bg: rgba(0, 0, 0, 0.06);
+    --wf-late: #ab2530; --wf-late-bg: rgba(171, 37, 48, 0.12);
+    --wf-done: #4a5361; --wf-done-bg: rgba(0, 0, 0, 0.05);
+    --wf-p0: #1f6fd6; --wf-p1: #4f8a1c; --wf-p2: #b36b00; --wf-p3: #6a4fd0; --wf-p4: #d03a78; --wf-p5: #0f8f82; --wf-p6: #d0562a; --wf-p7: #7b6f3a;
+    --wf-note: #5f6978; --wf-tag: #4a5361; --wf-cap: #5f6978; --wf-crit: #14171c;
+  }
+}
+:root[data-theme="light"] {
+  --wf-panel: #ffffff; --wf-line: #dce0e6; --wf-line2: #e6e9ee; --wf-grid: #e6e9ee; --wf-dots: #dfe3e9;
+  --wf-text: #14171c; --wf-strong: #0d1016; --wf-muted: #4a5361; --wf-soft: #2f3744;
+  --wf-acc: #5b3bc4; --wf-sug: #6a4fd0; --wf-bad: #ab2530; --wf-dep: #6b7385; --wf-link: #8a91a3; --wf-edge: #cdd2db;
+  --wf-btn: #f1f3f6; --wf-btnline: #cfd4dc; --wf-seg: #e9e6fb; --wf-segline: #c9c1f3; --wf-primary: #5b3bc4; --wf-sugline: #cfc6f5;
+  --wf-today-line: #b3a8ec; --wf-today-bg: rgba(91, 59, 196, 0.06); --wf-weekend: rgba(0, 0, 0, 0.025);
+  --wf-load1: #eceef3; --wf-load2: #dcdcf3; --wf-load3: #c5baf2;
+  --wf-ready: #0d6444; --wf-ready-bg: rgba(13, 100, 68, 0.12);
+  --wf-block: #4a5361; --wf-block-bg: rgba(0, 0, 0, 0.06);
+  --wf-late: #ab2530; --wf-late-bg: rgba(171, 37, 48, 0.12);
+  --wf-done: #4a5361; --wf-done-bg: rgba(0, 0, 0, 0.05);
+  --wf-p0: #1f6fd6; --wf-p1: #4f8a1c; --wf-p2: #b36b00; --wf-p3: #6a4fd0; --wf-p4: #d03a78; --wf-p5: #0f8f82; --wf-p6: #d0562a; --wf-p7: #7b6f3a;
+  --wf-note: #5f6978; --wf-tag: #4a5361; --wf-cap: #5f6978; --wf-crit: #14171c;
+}

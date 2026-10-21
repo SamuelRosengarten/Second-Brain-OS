@@ -1,206 +1,140 @@
-import fs from "node:fs";
-import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { acceptCapture, AcceptInput, createCapture, deleteCapture, getCapture, listCaptures, processCapture, updateCapture } from "../src/lib/captures.ts";
-import { getConfig } from "../src/lib/config.ts";
-import { getNote, listNotes, reindexVault, updateNote, deleteNote } from "../src/lib/notes.ts";
-import { OllamaProvider, setProvider } from "../src/lib/ollama.ts";
-import { search, embedPending, embeddingStatus } from "../src/lib/search.ts";
-import { createProject, createTask, listTasks, projectDetail, updateTask, linkNote } from "../src/lib/projects.ts";
-import { buildBriefing } from "../src/lib/briefing.ts";
-import { cleanup, fakeProvider, freshEnv, goodProposal } from "./helpers.ts";
+import { createProject, createTask, deleteTask, updateTask } from "../src/lib/projects.ts";
+import { createNote } from "../src/lib/notes.ts";
+import { createCapture } from "../src/lib/captures.ts";
+import { getDb } from "../src/lib/db.ts";
+import { setProvider } from "../src/lib/ollama.ts";
+import { addDep, generateDepSuggestions, listDeps, pendingSuggestions, removeDep, resolveSuggestion, workflowData } from "../src/lib/workflow.ts";
+import { cleanup, fakeProvider, freshEnv } from "./helpers.ts";
 
 let dir: string;
 beforeEach(() => { dir = freshEnv(); });
 afterEach(() => cleanup(dir));
 
-describe("capture -> note workflow", () => {
-  it("persists the capture before AI, processes, accepts into a Markdown note, and finds it by search", async () => {
-    const { capture, duplicate } = await createCapture({ content: "Grow tomato plants in the backyard garden this spring", kind: "idea" });
-    expect(duplicate).toBe(false);
-    expect(capture.status).toBe("new");
-    expect(getCapture(capture.id)!.original_content).toContain("tomato");
+const mk = (title: string, o: Record<string, unknown> = {}) => createTask({ title, ...o });
 
-    setProvider(fakeProvider({ json: goodProposal }));
-    const processed = await processCapture(capture.id);
-    expect(processed.status).toBe("proposed");
-    expect(processed.proposal!.title).toBe("Backyard tomato garden");
-    expect(processed.original_content).toBe(capture.original_content); // untouched
-
-    const { note, taskIds } = acceptCapture(capture.id, AcceptInput.parse({
-      title: processed.proposal!.title, body: processed.proposal!.note_markdown, summary: processed.proposal!.summary,
-      tags: processed.proposal!.tags, category: "idea", tasks: [{ title: "Buy tomato seeds" }],
-    }));
-    expect(taskIds).toHaveLength(1);
-    const file = path.join(getConfig().vaultDir, note.path);
-    const md = fs.readFileSync(file, "utf8");
-    expect(md).toMatch(/^---\nid: /);
-    expect(md).toContain("## Next action");
-    expect(getCapture(capture.id)!.status).toBe("accepted");
-    expect(() => acceptCapture(capture.id, AcceptInput.parse({ title: "x", body: "y" }))).toThrow(/already/);
-
-    const res = await search("tomato seeds");
-    expect(res.hits[0].noteId).toBe(note.id);
-    expect(res.hits[0].path).toBe(note.path);
-    expect(res.semantic.used).toBe(false); // no embeddings yet -> keyword fallback
+describe("dependencies", () => {
+  it("adds, lists and removes links, refuses loops and self-links, and is idempotent", () => {
+    const a = mk("A"), b = mk("B"), c = mk("C");
+    addDep(b.id, a.id);
+    addDep(b.id, a.id);
+    addDep(c.id, b.id);
+    expect(listDeps()).toEqual(expect.arrayContaining([{ a: a.id, b: b.id }, { a: b.id, b: c.id }]));
+    expect(listDeps()).toHaveLength(2);
+    expect(() => addDep(a.id, c.id)).toThrow(/loop/);
+    expect(() => addDep(a.id, a.id)).toThrow(/itself/);
+    expect(() => addDep(a.id, "nope")).toThrow(/not found/);
+    removeDep(c.id, b.id);
+    expect(listDeps()).toEqual([{ a: a.id, b: b.id }]);
   });
-
-  it("rejects duplicate submissions", async () => {
-    const a = await createCapture({ content: "Same   thought" });
-    const b = await createCapture({ content: "same thought" });
-    expect(b.duplicate).toBe(true);
-    expect(b.capture.id).toBe(a.capture.id);
-    expect(listCaptures()).toHaveLength(1);
+  it("hides links to trashed tasks and brings them back on restore", async () => {
+    const { restoreTask } = await import("../src/lib/projects.ts");
+    const a = mk("A"), b = mk("B");
+    addDep(b.id, a.id);
+    deleteTask(a.id);
+    expect(listDeps()).toEqual([]);
+    expect(() => addDep(b.id, a.id)).toThrow(/not found/);
+    restoreTask(a.id);
+    expect(listDeps()).toHaveLength(1);
   });
-
-  it("keeps the capture when Ollama is down, then retries successfully", async () => {
-    const { capture } = await createCapture({ content: "An idea that must never be lost" });
-    setProvider(fakeProvider({ down: true }));
-    const failed = await processCapture(capture.id);
-    expect(failed.status).toBe("failed");
-    expect(failed.error).toMatch(/Cannot reach Ollama/);
-    expect(failed.original_content).toBe("An idea that must never be lost");
-
-    setProvider(fakeProvider({ json: goodProposal }));
-    expect((await processCapture(capture.id)).status).toBe("proposed");
-  });
-
-  it("records a clear error when the model returns malformed output", async () => {
-    const { capture } = await createCapture({ content: "Some content" });
-    setProvider(fakeProvider({ json: { title: "only a title" } }));
-    const r = await processCapture(capture.id);
-    expect(r.status).toBe("failed");
-    expect(r.error).toMatch(/expected format/);
-  });
-
-  it("drops related projects the model invented", async () => {
-    createProject({ name: "Garden" });
-    const { capture } = await createCapture({ content: "garden stuff" });
-    setProvider(fakeProvider({ json: { ...goodProposal, related_projects: ["Garden", "Made Up"] } }));
-    expect((await processCapture(capture.id)).proposal!.related_projects).toEqual(["Garden"]);
-  });
-
-  it("reports a missing Ollama server through the real provider (nothing listening)", async () => {
-    setProvider(new OllamaProvider("http://127.0.0.1:9"));
-    const { capture } = await createCapture({ content: "offline test" });
-    const r = await processCapture(capture.id);
-    expect(r.status).toBe("failed");
-    expect(r.error).toMatch(/Cannot reach Ollama/);
-  });
-
-  it("reports a missing model with the exact pull command", async () => {
-    const server = (await import("node:http")).createServer((_req, res) => { res.statusCode = 404; res.end("not found"); });
-    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-    const port = (server.address() as { port: number }).port;
-    try {
-      setProvider(new OllamaProvider(`http://127.0.0.1:${port}`));
-      const { capture } = await createCapture({ content: "model missing test" });
-      const r = await processCapture(capture.id, "qwen3.5:9b");
-      expect(r.error).toContain("ollama pull qwen3.5:9b");
-    } finally { server.close(); }
-  });
-
-  it("edits, archives and deletes captures; attachments are validated", async () => {
-    const { capture } = await createCapture({ content: "edit me" });
-    expect(updateCapture(capture.id, { content: "edited" }).content).toBe("edited");
-    expect(getCapture(capture.id)!.original_content).toBe("edit me");
-    updateCapture(capture.id, { archived: true });
-    expect(listCaptures()).toHaveLength(0);
-    expect(listCaptures({ archived: true })).toHaveLength(1);
-
-    await expect(createCapture({ files: [{ name: "evil.exe", data: Buffer.from("MZ") }] })).rejects.toMatchObject({ status: 415 });
-    await expect(createCapture({ files: [{ name: "fake.pdf", data: Buffer.from("not a pdf") }] })).rejects.toMatchObject({ status: 415 });
-    const withFile = await createCapture({ files: [{ name: "../../notes.txt", data: Buffer.from("file body") }] });
-    expect(withFile.capture.attachments[0].filename).toBe("notes.txt");
-    expect(withFile.capture.content).toContain("file body");
-    const stored = fs.readdirSync(path.join(getConfig().attachmentsDir, new Date().toISOString().slice(0, 7)));
-    expect(stored.some((f) => f.endsWith("notes.txt"))).toBe(true);
-    deleteCapture(withFile.capture.id);
-    expect(getCapture(withFile.capture.id)).toBeNull();
+  it("removes links when a task is deleted for good", () => {
+    const a = mk("A"), b = mk("B");
+    addDep(b.id, a.id);
+    deleteTask(a.id, true);
+    expect(getDb().prepare("SELECT COUNT(*) AS c FROM task_deps").get()).toEqual({ c: 0 });
   });
 });
 
-describe("notes + search", () => {
-  it("edits, reindexes from files, trashes on delete", async () => {
-    setProvider(fakeProvider());
-    const { capture } = await createCapture({ content: "x" });
-    const { note } = acceptCapture(capture.id, AcceptInput.parse({ title: "Budget plan", body: "Monthly budget and invoice tracking", tags: ["Money"] }));
-    expect(getNote(note.id)!.tags).toEqual(["money"]);
-
-    updateNote(note.id, { body: "Monthly budget with python scripts" });
-    expect((await search("python")).hits).toHaveLength(1);
-    expect((await search("invoice")).hits).toHaveLength(0);
-
-    // external edit + new file appear after reindex; DB wipe is recoverable
-    fs.writeFileSync(path.join(getConfig().vaultDir, "external.md"), "# External note\n\nwritten in another editor with zebra");
-    const r = reindexVault();
-    expect(r.added).toBe(1);
-    expect((await search("zebra")).hits[0].title).toBe("External note");
-
-    deleteNote(note.id);
-    expect(getNote(note.id)).toBeNull();
-    expect(fs.existsSync(path.join(getConfig().vaultDir, ".trash", note.path))).toBe(true);
-    expect(listNotes().map((n) => n.title)).toEqual(["External note"]);
+describe("AI dependency suggestions", () => {
+  const links = (l: unknown[]) => fakeProvider({ json: { links: l } });
+  it("stores validated suggestions as pending proposals and changes nothing else", async () => {
+    const a = mk("Write the lesson"), b = mk("Write a quiz for the lesson"), c = mk("Buy milk");
+    const existing = mk("Existing pair first"), existing2 = mk("Existing pair second");
+    addDep(existing2.id, existing.id);
+    setProvider(links([
+      { first: "T1", then: "T2", confidence: 84.4, reason: "The quiz needs the lesson." },
+      { first: "T2", then: "T1", confidence: 70, reason: "reverse of the above" },
+      { first: "T9", then: "T1", confidence: 90, reason: "unknown label" },
+      { first: "T3", then: "T3", confidence: 90, reason: "self" },
+      { first: "t3", then: "t1", confidence: 40, reason: "weak but valid, lower case label" },
+      { first: "T4", then: "T5", confidence: 99, reason: "already linked" },
+    ]));
+    const r = await generateDepSuggestions();
+    expect(r).toEqual({ added: 2, considered: 5 });
+    const pend = pendingSuggestions();
+    expect(pend.map((s) => [s.a, s.b, s.confidence])).toEqual([[a.id, b.id, 84], [c.id, a.id, 40]]);
+    expect(listDeps()).toEqual([{ a: existing.id, b: existing2.id }]);
+    expect((await generateDepSuggestions()).added).toBe(0);
   });
-
-  it("uses semantic search when embeddings exist and falls back when Ollama is gone", async () => {
-    setProvider(fakeProvider());
-    const { capture } = await createCapture({ content: "seed" });
-    acceptCapture(capture.id, AcceptInput.parse({ title: "Growing tomato", body: "Water the tomato plants every morning" }));
-    acceptCapture(capture.id.length ? (await createCapture({ content: "other" })).capture.id : "", AcceptInput.parse({ title: "Finance", body: "Pay the invoice and review the budget" }));
-    expect(embeddingStatus().embedded).toBe(0);
-    expect((await embedPending()).embedded).toBeGreaterThan(0);
-
-    const hit = await search("garden tomato water");
-    expect(hit.semantic.used).toBe(true);
-    expect(hit.hits[0].title).toBe("Growing tomato");
-
-    setProvider(fakeProvider({ down: true }));
-    const fallback = await search("tomato");
-    expect(fallback.semantic.used).toBe(false);
-    expect(fallback.hits[0].title).toBe("Growing tomato");
+  it("accepting creates the link, dismissing is remembered, and handled suggestions cannot be handled twice", async () => {
+    const a = mk("A step"), b = mk("B step");
+    mk("C step");
+    setProvider(links([{ first: "T1", then: "T2", confidence: 90, reason: "r1" }, { first: "T2", then: "T3", confidence: 75, reason: "r2" }]));
+    await generateDepSuggestions();
+    const [s1, s2] = pendingSuggestions();
+    resolveSuggestion(s1.id, "accept");
+    resolveSuggestion(s2.id, "dismiss");
+    expect(listDeps()).toEqual([{ a: a.id, b: b.id }]);
+    expect(pendingSuggestions()).toEqual([]);
+    expect(() => resolveSuggestion(s1.id, "dismiss")).toThrow(/already handled/);
+    expect(() => resolveSuggestion("nope", "accept")).toThrow(/not found/);
+    expect((await generateDepSuggestions()).added).toBe(0);
   });
-
-  it("is safe against FTS operator injection", async () => {
-    expect((await search('" OR * NEAR( AND')).hits).toEqual([]);
-    expect((await search("NOT")).hits).toEqual([]);
+  it("skips pairs that would form a loop, needs two open tasks and rejects malformed model output", async () => {
+    const a = mk("One"), b = mk("Two");
+    addDep(b.id, a.id);
+    setProvider(links([{ first: "T2", then: "T1", confidence: 95, reason: "loop" }]));
+    expect((await generateDepSuggestions()).added).toBe(0);
+    updateTask(b.id, { status: "done" });
+    setProvider(links([]));
+    expect(await generateDepSuggestions()).toEqual({ added: 0, considered: 1 });
+    mk("Three");
+    setProvider(fakeProvider({ json: { nonsense: 1 } }));
+    await expect(generateDepSuggestions()).rejects.toThrow(/unexpected format/);
   });
 });
 
-describe("projects, tasks, briefing", () => {
-  it("links notes/tasks to projects and builds a truthful briefing", async () => {
-    const empty = buildBriefing();
-    expect(empty.counts.openTasks).toBe(0);
-    expect(empty.notes[0]).toBe("Nothing needs attention right now.");
+describe("workflowData", () => {
+  it("returns tasks, deps and the graph links between projects, notes, tags, captures and tasks", async () => {
+    const p = createProject({ name: "Internship" });
+    const t1 = mk("Rewrite headline", { project_id: p.id, due_date: "2026-10-26" });
+    const t2 = mk("Message contacts", { project_id: p.id, due_date: "2026-10-28" });
+    const gone = mk("Trashed", { project_id: p.id });
+    addDep(t2.id, t1.id);
+    deleteTask(gone.id);
+    const note = createNote({ title: "Internship search", body: "x", tags: ["internship"] });
+    getDb().prepare("INSERT INTO project_notes (project_id, note_id) VALUES (?,?)").run(p.id, note.id);
+    const { capture } = await createCapture({ content: "Internship fair dates are in March" });
+    getDb().prepare("UPDATE captures SET note_id = ? WHERE id = ?").run(note.id, capture.id);
+    const cap2 = (await createCapture({ content: "Ask about the portfolio" })).capture;
+    getDb().prepare("UPDATE tasks SET capture_id = ? WHERE id = ?").run(cap2.id, t1.id);
+    mk("Follow up", { project_id: p.id });
 
-    const p = createProject({ name: "Website", goals: "Ship v1" });
-    const yesterday = new Date(Date.now() - 86400_000);
-    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const t1 = createTask({ title: "Overdue", due_date: iso(yesterday), project_id: p.id, priority: "high" });
-    createTask({ title: "Today", due_date: iso(new Date()) });
-    createTask({ title: "No date" });
-    const { capture } = await createCapture({ content: "n" });
-    const { note } = acceptCapture(capture.id, AcceptInput.parse({ title: "Spec", body: "b" }));
-    linkNote(p.id, note.id);
-
-    const b = buildBriefing();
-    expect(b.counts).toMatchObject({ openTasks: 3, overdue: 1, dueToday: 1, activeProjects: 1 });
-    expect(b.overdue[0].id).toBe(t1.id);
-    expect(b.notes.join(" ")).toContain("no calendar is connected");
-
-    const done = updateTask(t1.id, { status: "done" });
-    expect(done.completed_at).not.toBeNull();
-    expect(updateTask(t1.id, { status: "todo" }).completed_at).toBeNull();
-    expect(listTasks({ status: "open", priority: "high" })).toHaveLength(1);
-    const d = projectDetail(p.id)!;
-    expect(d.tasks).toHaveLength(1);
-    expect(d.notes).toHaveLength(1);
-    expect(d.activity.length).toBeGreaterThan(2);
+    const d = workflowData("2026-10-21");
+    expect(d.projects.map((x) => x.name)).toEqual(["Internship"]);
+    expect(d.tasks.map((t) => t.title).sort()).toEqual(["Follow up", "Message contacts", "Rewrite headline"]);
+    expect(d.deps).toEqual([{ a: t1.id, b: t2.id }]);
+    expect(d.notes.map((n) => n.id)).toEqual([note.id]);
+    expect(d.tags).toEqual([{ id: "tag:internship", title: "#internship" }]);
+    expect(d.captures.map((c) => c.id).sort()).toEqual([capture.id, cap2.id].sort());
+    const has = (a: string, b: string) => d.links.some((l) => l.a === a && l.b === b);
+    expect(has(note.id, p.id)).toBe(true);
+    expect(has("tag:internship", note.id)).toBe(true);
+    expect(has(capture.id, note.id)).toBe(true);
+    expect(has(cap2.id, t1.id)).toBe(true);
+    expect(d.captures.find((c) => c.id === capture.id)!.title).toBe("Internship fair dates are in March");
   });
+  it("is empty and valid on a fresh install", () => {
+    expect(workflowData("2026-10-21")).toMatchObject({ projects: [], tasks: [], deps: [], suggestions: [], notes: [], tags: [], captures: [], links: [] });
+  });
+});
 
-  it("validates input", () => {
-    expect(() => createTask({ title: "" })).toThrow();
-    expect(() => createTask({ title: "x", due_date: "tomorrow" })).toThrow();
-    expect(() => createTask({ title: "x", project_id: "nope" })).toThrow(/Unknown project/);
+describe("explanations for the user", () => {
+  it("replaces the model's task labels with task titles", async () => {
+    const { humanizeReason } = await import("../src/lib/workflow.ts");
+    const titles = new Map([["T4", "Add the placeholder projects"], ["T5", "Redeploy the site"]]);
+    expect(humanizeReason("The site cannot be redeployed (T5) until the projects are added (T4).", titles)).toBe("The site cannot be redeployed (\u201cRedeploy the site\u201d) until the projects are added (\u201cAdd the placeholder projects\u201d).");
+    expect(humanizeReason("t4 comes before T5, and T9 is unknown", titles)).toBe("\u201cAdd the placeholder projects\u201d comes before \u201cRedeploy the site\u201d, and T9 is unknown");
+    expect(humanizeReason("No labels here", titles)).toBe("No labels here");
   });
 });

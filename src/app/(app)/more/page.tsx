@@ -6,7 +6,7 @@ const ITEMS = [
   { href: "/knowledge", label: "Notes", note: "Your Markdown library, import and search", icon: FileText },
   { href: "/tasks", label: "Tasks", note: "Everything to do", icon: ListTodo },
   { href: "/projects", label: "Projects", note: "Goals, tasks and linked notes", icon: FolderKanban },
-  { href: "/pipeline", label: "Pipeline", note: "Projects and tasks laid out by due date", icon: Waypoints },
+  { href: "/workflow", label: "Workflow", note: "Timeline, dependencies and graph", icon: Waypoints },
   { href: "/ai", label: "Ask AI", note: "Local chat and Claude handoff", icon: Sparkles },
   { href: "/automations", label: "Automations", note: "Manual jobs and run history", icon: Workflow },
   { href: "/settings", label: "Settings", note: "Models, backup, theme, sign out", icon: Settings },

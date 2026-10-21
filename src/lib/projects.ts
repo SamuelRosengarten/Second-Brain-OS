@@ -200,15 +200,3 @@ export function restoreTask(id: string): Task {
   getDb().prepare("UPDATE tasks SET deleted_at = NULL WHERE id = ?").run(id);
   return getTask(id)!;
 }
-
-/** Everything the Pipeline page needs in one call: non-archived projects, every open task, and tasks finished in the last 30 days. */
-export function pipelineData(today: string = todayLocal()): { projects: (Project & { open_tasks: number; note_count: number })[]; tasks: Task[] } {
-  const since = addDays(today, -30);
-  const tasks = getDb()
-    .prepare(
-      `SELECT * FROM tasks WHERE deleted_at IS NULL AND (status <> 'done' OR substr(completed_at, 1, 10) >= ?)
-       ORDER BY due_date IS NULL, due_date, CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, created_at LIMIT 1000`,
-    )
-    .all(since) as Task[];
-  return { projects: listProjects().filter((p) => p.status !== "archived"), tasks };
-}

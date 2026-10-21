@@ -31,52 +31,6 @@ const describe = (t: PTask, today: string): string => {
   return `${t.title}, ${STATE_LABEL[st].toLowerCase()}, ${when}, ${t.priority} priority`;
 };
 
-/* ---------- summary tiles ---------- */
-
-export function PipelineSummary({ projects, tasks, today }: { projects: PProject[]; tasks: PTask[]; today: string }) {
-  const open = tasks.filter((t) => t.status !== "done");
-  const stats = (id: string) => projectStats(tasks.filter((t) => t.project_id === id), today, projects.find((p) => p.id === id));
-  const items: { label: string; value: number; tone: string; icon: LucideIcon }[] = [
-    { label: "Overdue", value: open.filter((t) => taskState(t, today) === "overdue").length, tone: "text-danger", icon: AlertTriangle },
-    { label: "Due in 7 days", value: open.filter((t) => t.due_date && diffDays(today, t.due_date) >= 0 && diffDays(today, t.due_date) <= 7).length, tone: "text-warn", icon: Clock },
-    { label: "In progress", value: open.filter((t) => t.status === "doing").length, tone: "text-info", icon: Play },
-    { label: "Finished this week", value: tasks.filter((t) => t.status === "done" && (t.completed_at ?? "").slice(0, 10) >= addDays(today, -7)).length, tone: "text-ok", icon: Check },
-    { label: "Projects behind", value: projects.filter((p) => stats(p.id).health === "behind").length, tone: "text-danger", icon: Flag },
-  ];
-  return (
-    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" aria-label="Pipeline summary">
-      {items.map((i) => (
-        <li key={i.label} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5 last:col-span-2 sm:last:col-span-1">
-          <i.icon size={18} aria-hidden className={i.value ? i.tone : "text-faint"} />
-          <span className="min-w-0">
-            <span className="tnum block text-xl leading-none font-semibold">{i.value}</span>
-            <span className="block truncate text-xs text-muted">{i.label}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function Legend() {
-  const states: TaskState[] = ["overdue", "soon", "doing", "todo", "done"];
-  return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted" aria-label="Legend">
-      {states.map((s) => {
-        const S = STATE_STYLE[s];
-        return (
-          <li key={s} className="flex items-center gap-1.5">
-            <span className={cx("grid size-4 place-items-center rounded-full border", S.cls)}><S.icon size={9} aria-hidden strokeWidth={2.5} /></span>
-            {STATE_LABEL[s]}
-          </li>
-        );
-      })}
-      <li className="flex items-center gap-1.5"><span aria-hidden className="h-3 w-0.5 rounded bg-accent" />Today</li>
-      <li className="flex items-center gap-1.5"><Flag size={12} aria-hidden className="text-faint" />Project target date</li>
-    </ul>
-  );
-}
-
 /* ---------- timeline (swimlanes) ---------- */
 
 export const RANGES = [{ days: 14, label: "2 weeks", px: 44 }, { days: 42, label: "6 weeks", px: 20 }, { days: 90, label: "3 months", px: 10 }] as const;
@@ -237,65 +191,6 @@ export function PipelineTimeline({ projects, tasks, today, rangeDays, showDone, 
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- horizon (columns by due date) ---------- */
-
-const COLUMN_TONE: Record<string, string> = { overdue: "border-t-danger", today: "border-t-accent", week: "border-t-warn", month: "border-t-info", later: "border-t-faint", undated: "border-t-line", done: "border-t-ok" };
-
-export function PipelineHorizon({ projects, tasks, today, showDone, onOpen }: { projects: PProject[]; tasks: PTask[]; today: string; showDone: boolean; onOpen: (t: PTask) => void }) {
-  const names = new Map(projects.map((p) => [p.id, p.name]));
-  const cols = HORIZONS.filter((h) => showDone || h !== "done").map((h) => ({
-    id: h,
-    items: tasks
-      .filter((t) => horizonOf(t, today) === h)
-      .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999") || ({ high: 0, medium: 1, low: 2 }[a.priority] - { high: 0, medium: 1, low: 2 }[b.priority])),
-  }));
-  return (
-    <div role="region" tabIndex={0} aria-label="Tasks grouped by when they are due. Scrolls sideways." className="relative overflow-x-auto rounded-lg focus-visible:outline-offset-2">
-      <div className="grid w-max min-w-full auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-3 pb-2">
-        {cols.map((c) => (
-          <section key={c.id} aria-label={`${HORIZON_LABEL[c.id]}, ${c.items.length} tasks`} className={cx("min-w-0 rounded-lg border border-t-2 border-line bg-surface", COLUMN_TONE[c.id])}>
-            <h3 className="flex items-center justify-between px-3 py-2 text-xs font-semibold tracking-wide text-muted uppercase">
-              {HORIZON_LABEL[c.id]}
-              <span className="tnum rounded bg-surface2 px-1.5 py-0.5 text-xs text-muted">{c.items.length}</span>
-            </h3>
-            <ul className="space-y-2 px-2 pb-2">
-              {c.items.length === 0 && <li className="px-1 py-3 text-xs text-faint">Nothing here</li>}
-              {c.items.map((t) => {
-                const st = taskState(t, today);
-                const S = STATE_STYLE[st];
-                const pn = t.project_id ? names.get(t.project_id) : undefined;
-                return (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => onOpen(t)}
-                      style={{ borderLeftColor: t.project_id ? projectColor(t.project_id) : "var(--border)" }}
-                      className="block w-full rounded-md border border-l-[3px] border-line bg-surface2 px-2.5 py-2 text-left hover:bg-hover"
-                    >
-                      <span className="flex items-start gap-2">
-                        <S.icon size={14} aria-hidden strokeWidth={2.25} className={cx("mt-0.5 shrink-0", S.text)} />
-                        <span className={cx("min-w-0 text-[13px] leading-snug", t.status === "done" && "text-faint line-through")}>
-                          <span className="sr-only">{STATE_LABEL[st]}: </span>
-                          {t.title}
-                        </span>
-                      </span>
-                      <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[22px] text-xs text-muted">
-                        {pn && <span className="truncate">{pn}</span>}
-                        {t.due_date && t.status !== "done" && <span className={cx("tnum", S.text)}>{fmtShort(t.due_date)}</span>}
-                        {t.priority === "high" && t.status !== "done" && <span className="flex items-center gap-0.5 text-danger"><Flag size={11} aria-hidden />High</span>}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
       </div>
     </div>
   );

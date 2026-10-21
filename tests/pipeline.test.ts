@@ -1,8 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { diffDays, horizonOf, packMarkers, projectHue, projectStats, roomToRight, taskState, timelineWindow, type PTask } from "../src/lib/pipeline.ts";
-import { createProject, createTask, deleteTask, pipelineData, updateProject } from "../src/lib/projects.ts";
-import { getDb } from "../src/lib/db.ts";
-import { cleanup, freshEnv } from "./helpers.ts";
 
 const T = (o: Partial<PTask>): PTask => ({ id: "x", title: "t", description: "", status: "todo", priority: "medium", due_date: null, project_id: null, completed_at: null, ...o });
 const today = "2026-06-10";
@@ -54,26 +51,5 @@ describe("pipeline helpers", () => {
     const room = roomToRight(placed, 300);
     expect(room.get(placed.find((p) => p.item === "a")!)).toBe(50);
     expect(room.get(placed.find((p) => p.item === "c")!)).toBe(240);
-  });
-});
-
-describe("pipelineData", () => {
-  let dir: string;
-  beforeEach(() => { dir = freshEnv(); });
-  afterEach(() => cleanup(dir));
-  it("returns open tasks, recently finished ones, and skips archived projects and trashed tasks", () => {
-    const p = createProject({ name: "Live" });
-    const old = createProject({ name: "Old" });
-    updateProject(old.id, { status: "archived" });
-    createTask({ title: "open", project_id: p.id });
-    const fresh = createTask({ title: "finished lately", status: "done", project_id: p.id });
-    const stale = createTask({ title: "finished long ago", status: "done", project_id: p.id });
-    const gone = createTask({ title: "trashed", project_id: p.id });
-    getDb().prepare("UPDATE tasks SET completed_at = ? WHERE id = ?").run("2026-06-08T09:00:00.000Z", fresh.id);
-    getDb().prepare("UPDATE tasks SET completed_at = ? WHERE id = ?").run("2026-03-01T09:00:00.000Z", stale.id);
-    deleteTask(gone.id);
-    const d = pipelineData("2026-06-10");
-    expect(d.projects.map((x) => x.name)).toEqual(["Live"]);
-    expect(d.tasks.map((t) => t.title).sort()).toEqual(["finished lately", "open"]);
   });
 });
