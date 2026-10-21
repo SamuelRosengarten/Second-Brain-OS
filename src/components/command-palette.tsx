@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { CornerDownLeft, FileText, FolderKanban, Home, Inbox, ListTodo, PenLine, Plus, Search, Settings, Sparkles, Workflow, type LucideIcon } from "lucide-react";
+import { CornerDownLeft, FileText, FolderKanban, Home, Inbox, ListTodo, PenLine, Plus, Search, Settings, Sparkles, Waypoints, Workflow, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./client";
 import { cx, Kbd } from "./ui";
@@ -72,6 +72,7 @@ export function CommandPalette({ open, onClose, projects }: { open: boolean; onC
       { id: "notes", group: "Go to", label: "Notes", hint: "Knowledge library", icon: FileText, keywords: "knowledge library", run: go("/knowledge") },
       { id: "tasks", group: "Go to", label: "Tasks", icon: ListTodo, run: go("/tasks") },
       { id: "projects", group: "Go to", label: "Projects", icon: FolderKanban, run: go("/projects") },
+      { id: "pipeline", group: "Go to", label: "Pipeline", hint: "Projects and tasks by due date", icon: Waypoints, keywords: "timeline gantt roadmap schedule board kanban deadlines", run: go("/pipeline") },
       { id: "ai", group: "Go to", label: "Ask AI", hint: "Local chat and Claude handoff", icon: Sparkles, keywords: "chat ollama assistant", run: go("/ai") },
       { id: "automations", group: "Go to", label: "Automations", icon: Workflow, keywords: "jobs", run: go("/automations") },
       { id: "settings", group: "Go to", label: "Settings", hint: "Models, backup, theme", icon: Settings, keywords: "backup model theme sign out", run: go("/settings") },

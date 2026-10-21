@@ -1,10 +1,12 @@
 "use client";
 import Link from "next/link";
-import { Send, Square, X } from "lucide-react";
+import { ListPlus, Send, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiFailure, useApi } from "@/components/client";
 import { Badge, Button, Card, CardTitle, ConfirmDialog, EmptyState, ErrorBox, Field, Input, PageHeader, Select, Tabs, Textarea, useToast } from "@/components/ui";
+import { SuggestTasksDialog } from "@/components/suggest-tasks";
 import type { Source, StoredMessage } from "@/lib/chat";
+import type { Project } from "@/lib/projects";
 
 interface Msg { role: "user" | "assistant"; content: string; sources?: Source[] | null; grounded?: boolean; workspace?: { projects: number; tasks: number }; error?: { message: string; hint?: string } }
 interface ModelsResp { ok: boolean; selected: string; models: { name: string; sizeBytes: number }[]; error?: string; hint?: string }
@@ -33,6 +35,8 @@ function Chat() {
   const toast = useToast();
   const models = useApi<ModelsResp>("/api/models");
   const convs = useApi<{ conversations: Conv[] }>("/api/conversations");
+  const projectsApi = useApi<{ projects: Project[] }>("/api/projects");
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [model, setModel] = useState("");
   const [convId, setConvId] = useState<string | undefined>();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -140,6 +144,7 @@ function Chat() {
             {!modelList.some((m) => m.name === model) && model && <option value={model}>{model} (not installed)</option>}
             {modelList.map((m) => <option key={m.name} value={m.name}>{m.name} · {(m.sizeBytes / 1e9).toFixed(1)} GB</option>)}
           </Select></div>
+          <Button size="sm" onClick={() => setSuggestOpen(true)}><ListPlus size={14} aria-hidden />Suggest tasks</Button>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={useLibrary} onChange={(e) => setUseLibrary(e.target.checked)} />
             Answer from my library
@@ -164,6 +169,15 @@ function Chat() {
           {busy ? <Button onClick={() => abort.current?.abort()}><Square size={13} aria-hidden />Stop</Button> : <Button type="submit" variant="primary" disabled={!input.trim()}><Send size={13} aria-hidden />Send</Button>}
         </form>
       </div>
+
+      <SuggestTasksDialog
+        open={suggestOpen}
+        onClose={() => setSuggestOpen(false)}
+        conversationId={convId}
+        model={model || undefined}
+        initialRequest={[...msgs].reverse().find((m) => m.role === "user")?.content ?? ""}
+        projects={(projectsApi.data?.projects ?? []).filter((p) => p.status !== "archived")}
+      />
 
       <ConfirmDialog open={!!delId} title="Delete this conversation?" message="The messages are permanently removed. Your notes are not affected." onCancel={() => setDelId(null)} onConfirm={async () => {
         try {

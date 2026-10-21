@@ -3,8 +3,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, fmtDate, useApi } from "@/components/client";
-import { NewTask, TaskRow } from "@/components/task-list";
+import { api, fmtDate, localToday, useApi } from "@/components/client";
+import { PipelineTimeline } from "@/components/pipeline";
+import { NewTask, TaskEditDialog, TaskRow } from "@/components/task-list";
 import { Badge, Button, Card, CardTitle, ConfirmDialog, ErrorBox, Field, Input, Loading, Select, Textarea, useToast } from "@/components/ui";
 import type { Project, Task } from "@/lib/projects";
 
@@ -25,6 +26,7 @@ export default function ProjectDetail() {
   const [f, setF] = useState({ name: "", description: "", goals: "", status: "active", target_date: "" });
   const [confirm, setConfirm] = useState(false);
   const [pick, setPick] = useState("");
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   useEffect(() => {
     if (data) setF({ name: data.project.name, description: data.project.description, goals: data.project.goals, status: data.project.status, target_date: data.project.target_date ?? "" });
@@ -92,6 +94,13 @@ export default function ProjectDetail() {
         )}
       </Card>
 
+      {data.tasks.length > 0 && (
+        <Card>
+          <CardTitle>Timeline</CardTitle>
+          <PipelineTimeline projects={[p]} tasks={data.tasks} today={localToday()} rangeDays={42} showDone onOpen={(t) => setEditingTask(t as Task)} linkProjects={false} />
+        </Card>
+      )}
+
       <Card>
         <CardTitle>Tasks</CardTitle>
         <NewTask projectId={id} onCreated={() => void reload()} />
@@ -129,6 +138,8 @@ export default function ProjectDetail() {
           </ul>
         </Card>
       </div>
+
+      {editingTask && <TaskEditDialog key={editingTask.id} task={editingTask} projects={[{ id: p.id, name: p.name }]} onClose={() => setEditingTask(null)} onSaved={() => void reload()} />}
 
       <ConfirmDialog open={confirm} title="Delete this project?" message="Tasks stay in your task list but are unlinked from this project. Notes are not deleted." onCancel={() => setConfirm(false)} onConfirm={async () => {
         try {

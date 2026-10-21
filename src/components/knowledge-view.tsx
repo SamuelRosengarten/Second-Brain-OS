@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Database, FileText, Search as SearchIcon, Upload, PenLine } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, fmtDate, useApi } from "./client";
-import { Badge, Button, Dialog, EmptyState, ErrorBox, Field, Input, ListSkeleton, PageHeader, rowClass, RowList, Textarea, useToast } from "./ui";
+import { Badge, Button, Dialog, EmptyState, ErrorBox, Field, Input, ListSkeleton, PageHeader, rowClass, RowList, Select, Textarea, useToast } from "./ui";
 import type { NoteMeta } from "@/lib/notes";
 import type { SearchHit } from "@/lib/search";
 
@@ -26,12 +26,13 @@ function Inner({ autoFocus }: { autoFocus?: boolean }) {
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [query, setQuery] = useState(sp.get("q") ?? "");
   const [tag, setTag] = useState("");
+  const [sort, setSort] = useState("updated");
   const [search, setSearch] = useState<SearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(sp.get("new") === "1");
-  const notes = useApi<{ notes: NoteMeta[] }>(`/api/notes${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`);
+  const notes = useApi<{ notes: NoteMeta[] }>(`/api/notes?sort=${sort}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}`);
   const tags = useApi<{ tags: { tag: string; count: number }[] }>("/api/tags");
   const status = useApi<{ embedModel: { name: string; installed: boolean; total: number; embedded: number } }>("/api/status");
 
@@ -132,6 +133,13 @@ function Inner({ autoFocus }: { autoFocus?: boolean }) {
         </div>
       ) : (
         <>
+          <div className="mb-3 flex justify-end">
+            <Select aria-label="Sort notes" value={sort} onChange={(e) => setSort(e.target.value)} className="w-48">
+              <option value="updated">Recently updated</option>
+              <option value="created">Recently created</option>
+              <option value="title">Title A–Z</option>
+            </Select>
+          </div>
           {(tags.data?.tags.length ?? 0) > 0 && (
             <div className="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Filter by tag">
               <button onClick={() => setTag("")} aria-pressed={!tag} className={`inline-flex min-h-9 items-center rounded-md border px-2.5 py-1 text-xs lg:min-h-7 ${!tag ? "border-accent/60 bg-accent/10 text-accent" : "border-line text-muted hover:text-fg"}`}>All</button>

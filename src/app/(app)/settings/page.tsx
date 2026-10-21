@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, useApi } from "@/components/client";
+import { ShareSetupCard } from "@/components/share-setup";
 import { Badge, Button, Card, CardTitle, ErrorBox, Field, Loading, PageHeader, Select, Textarea, useToast } from "@/components/ui";
 
 interface Settings { chat_model: string; system_prompt: string; default_system_prompt: string }
@@ -119,6 +120,8 @@ export default function SettingsPage() {
         {result && <p className="rounded-lg bg-surface2 p-3 font-mono text-xs break-all">{result}</p>}
         {(backups.data?.backups.length ?? 0) > 0 && <p className="text-xs text-muted">Existing backups: {backups.data!.backups.slice(0, 5).map((b) => b.name).join(", ")}</p>}
       </Card>
+
+      <ShareSetupCard />
 
       <Card className="space-y-3">
         <CardTitle>Appearance &amp; session</CardTitle>

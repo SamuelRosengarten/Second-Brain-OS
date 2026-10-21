@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { route } from "@/lib/api";
-import { createNote, listNotes } from "@/lib/notes";
+import { createNote, listNotes, NOTE_SORTS, type NoteSort } from "@/lib/notes";
 
 export const dynamic = "force-dynamic";
 export const GET = route({}, ({ url }) => {
   const p = url.searchParams;
+  const sort = NOTE_SORTS.find((s) => s === p.get("sort")) as NoteSort | undefined;
   return {
-    notes: listNotes({ q: p.get("q") || undefined, tag: p.get("tag") || undefined, category: p.get("category") || undefined, limit: Number(p.get("limit") || 100) }),
+    notes: listNotes({ sort, q: p.get("q") || undefined, tag: p.get("tag") || undefined, category: p.get("category") || undefined, limit: Number(p.get("limit") || 100) }),
   };
 });
 const NoteBody = z.object({

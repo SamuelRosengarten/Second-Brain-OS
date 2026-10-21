@@ -22,6 +22,7 @@
   --warn: #e9b96e;
   --danger: #f58a8a;
   --info: #79a9ff;
+  --pl: 64%; /* lightness of per-project colors (see projectColor) */
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -42,6 +43,7 @@
     --warn: #7a5200;
     --danger: #ab2530;
     --info: #2556bb;
+  --pl: 40%;
   }
 }
 :root[data-theme="light"] {
@@ -62,6 +64,7 @@
   --warn: #7a5200;
   --danger: #ab2530;
   --info: #2556bb;
+  --pl: 40%;
 }
 
 @theme inline {

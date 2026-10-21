@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { ChevronRight, FileText, FolderKanban, ListTodo, Settings, Sparkles, Workflow } from "lucide-react";
+import { ChevronRight, FileText, FolderKanban, ListTodo, Settings, Sparkles, Waypoints, Workflow } from "lucide-react";
 import { PageHeader, RowList, rowClass } from "@/components/ui";
 
 const ITEMS = [
   { href: "/knowledge", label: "Notes", note: "Your Markdown library, import and search", icon: FileText },
   { href: "/tasks", label: "Tasks", note: "Everything to do", icon: ListTodo },
   { href: "/projects", label: "Projects", note: "Goals, tasks and linked notes", icon: FolderKanban },
+  { href: "/pipeline", label: "Pipeline", note: "Projects and tasks laid out by due date", icon: Waypoints },
   { href: "/ai", label: "Ask AI", note: "Local chat and Claude handoff", icon: Sparkles },
   { href: "/automations", label: "Automations", note: "Manual jobs and run history", icon: Workflow },
   { href: "/settings", label: "Settings", note: "Models, backup, theme, sign out", icon: Settings },

@@ -222,8 +222,18 @@ export function deleteNote(id: string): void {
   })();
 }
 
+export const NOTE_SORTS = ["updated", "created", "title"] as const;
+export type NoteSort = (typeof NOTE_SORTS)[number];
+// Fixed SQL per sort key: the key is never interpolated from user input.
+const NOTE_ORDER: Record<NoteSort, string> = {
+  updated: "updated_at DESC",
+  created: "created_at DESC",
+  title: "title COLLATE NOCASE ASC, updated_at DESC",
+};
+
 export interface NoteListOpts {
   q?: string;
+  sort?: NoteSort;
   tag?: string;
   category?: string;
   limit?: number;
@@ -245,7 +255,7 @@ export function listNotes(opts: NoteListOpts = {}): NoteMeta[] {
     where.push("category = ?");
     args.push(opts.category);
   }
-  const sql = `SELECT * FROM notes ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
+  const sql = `SELECT * FROM notes ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY ${NOTE_ORDER[opts.sort && NOTE_SORTS.includes(opts.sort) ? opts.sort : "updated"]} LIMIT ? OFFSET ?`;
   const rows = getDb().prepare(sql).all(...args, Math.min(opts.limit ?? 100, 500), opts.offset ?? 0) as NoteRow[];
   return rows.map(toMeta);
 }

@@ -51,11 +51,24 @@ for (const theme of ["dark", "light"] as const) {
 
     const ids = await seed(page);
     const paths = ["/", "/capture", "/capture?title=Shared&text=https://example.com/x", "/inbox", `/inbox/${ids.capture}`, "/knowledge", `/knowledge/${ids.note}`,
-      "/projects", `/projects/${ids.project}`, "/tasks", "/ai", "/search?q=sample", "/settings", "/automations", "/more"];
+      "/projects", `/projects/${ids.project}`, "/pipeline", "/tasks", "/ai", "/search?q=sample", "/settings", "/automations", "/more"];
     for (const p of paths) {
       await page.goto(p);
       await scan(page, `${p} (${theme})`, found);
     }
+
+    // pipeline: the second view, the task dialog opened from a marker, the AI suggestion dialog and the trash panel
+    await page.goto("/pipeline");
+    await page.getByRole("tab", { name: "By due date" }).click();
+    await scan(page, `/pipeline by due date (${theme})`, found);
+    await page.goto("/ai");
+    await page.getByRole("button", { name: "Suggest tasks" }).click();
+    await expect(page.getByRole("dialog", { name: "Suggest tasks" })).toBeVisible();
+    await scan(page, `suggest tasks dialog (${theme})`, found);
+    await page.keyboard.press("Escape");
+    await page.goto("/tasks");
+    await page.getByRole("button", { name: "Show trash" }).click();
+    await scan(page, `tasks with trash (${theme})`, found);
 
     // transient UI: task edit dialog and the command palette
     await page.goto("/tasks");

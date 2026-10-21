@@ -36,6 +36,8 @@ export interface Project {
 export interface Task {
   id: string; title: string; description: string; status: "todo" | "doing" | "done"; priority: "low" | "medium" | "high";
   due_date: string | null; project_id: string | null; capture_id: string | null; created_at: string; completed_at: string | null;
+  /** Set while the task is in the trash. Trashed tasks are hidden from every list except listTrash(). */
+  deleted_at: string | null;
 }
 
 function logActivity(projectId: string | null | undefined, kind: string, message: string): void {
@@ -61,7 +63,7 @@ export const getProject = (id: string): Project | null =>
 export function listProjects(status?: string): (Project & { open_tasks: number; note_count: number })[] {
   return getDb()
     .prepare(
-      `SELECT p.*, (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status <> 'done') AS open_tasks,
+      `SELECT p.*, (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status <> 'done' AND t.deleted_at IS NULL) AS open_tasks,
               (SELECT COUNT(*) FROM project_notes pn WHERE pn.project_id = p.id) AS note_count
        FROM projects p ${status ? "WHERE p.status = ?" : ""} ORDER BY p.status = 'archived', p.updated_at DESC`,
     )
@@ -135,7 +137,7 @@ export interface TaskFilter {
   today?: string;
 }
 export function listTasks(f: TaskFilter = {}): Task[] {
-  const where: string[] = [];
+  const where: string[] = ["deleted_at IS NULL"];
   const args: unknown[] = [];
   const today = f.today ?? todayLocal();
   if (f.status === "open") where.push("status <> 'done'");
@@ -174,7 +176,39 @@ export function updateTask(id: string, patch: z.input<typeof TaskPatch>): Task {
   return getTask(id)!;
 }
 
-export function deleteTask(id: string): void {
+/** Moves a task to the trash (same id, restorable). Pass `purge` to delete it for good. */
+export function deleteTask(id: string, purge = false): void {
   if (!getTask(id)) throw new ApiError(404, "Task not found", "not_found");
-  getDb().prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  if (purge) getDb().prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  else getDb().prepare("UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL").run(nowIso(), id);
+}
+
+export const TRASH_DAYS = 30;
+
+/** Trashed tasks, newest first. Anything older than TRASH_DAYS is purged first so the trash never grows forever. */
+export function listTrash(): Task[] {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - TRASH_DAYS * 86_400_000).toISOString();
+  db.prepare("DELETE FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ?").run(cutoff);
+  return db.prepare("SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 200").all() as Task[];
+}
+
+/** Puts a trashed task back with all its original fields. If its project was deleted meanwhile it comes back without one. */
+export function restoreTask(id: string): Task {
+  const t = getTask(id);
+  if (!t) throw new ApiError(404, "Task not found", "not_found");
+  getDb().prepare("UPDATE tasks SET deleted_at = NULL WHERE id = ?").run(id);
+  return getTask(id)!;
+}
+
+/** Everything the Pipeline page needs in one call: non-archived projects, every open task, and tasks finished in the last 30 days. */
+export function pipelineData(today: string = todayLocal()): { projects: (Project & { open_tasks: number; note_count: number })[]; tasks: Task[] } {
+  const since = addDays(today, -30);
+  const tasks = getDb()
+    .prepare(
+      `SELECT * FROM tasks WHERE deleted_at IS NULL AND (status <> 'done' OR substr(completed_at, 1, 10) >= ?)
+       ORDER BY due_date IS NULL, due_date, CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, created_at LIMIT 1000`,
+    )
+    .all(since) as Task[];
+  return { projects: listProjects().filter((p) => p.status !== "archived"), tasks };
 }

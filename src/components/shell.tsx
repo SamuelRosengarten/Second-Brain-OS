@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, FileText, FolderKanban, Home, Inbox, ListTodo, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Search, Settings, Sparkles, Workflow, type LucideIcon } from "lucide-react";
+import { Brain, FileText, FolderKanban, Home, Inbox, ListTodo, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Search, Settings, Sparkles, Waypoints, Workflow, type LucideIcon } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useApi } from "./client";
 import { CommandPalette } from "./command-palette";
@@ -14,6 +14,7 @@ const PRIMARY: NavItem[] = [
   { href: "/knowledge", label: "Notes", icon: FileText },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/projects", label: "Projects", icon: FolderKanban },
+  { href: "/pipeline", label: "Pipeline", icon: Waypoints },
   { href: "/ai", label: "Ask AI", icon: Sparkles },
   { href: "/automations", label: "Automations", icon: Workflow },
 ];

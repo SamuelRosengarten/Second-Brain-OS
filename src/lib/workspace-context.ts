@@ -1,4 +1,4 @@
-import { ymd } from "./dates.ts";
+import { addDays, ymd } from "./dates.ts";
 import { listProjects, listTasks, type Task } from "./projects.ts";
 
 export interface WorkspaceContext { text: string; projects: number; tasks: number }
@@ -14,12 +14,25 @@ function mentioned(name: string, question: string): boolean {
   return words(name).some((w) => q.has(w));
 }
 
+const RECENT_DONE_DAYS = 14; // finished tasks older than this are left out so "what did I finish lately?" works without flooding the prompt
+const RECENT_DONE_MAX = 8;
+
 function taskLine(t: Task, today: string): string {
-  const bits = [`[${STATUS[t.status]}]`, t.title, `(${t.priority} priority`];
-  if (t.due_date) bits[bits.length - 1] += `, due ${t.due_date}${t.status !== "done" && t.due_date < today ? " OVERDUE" : ""}`;
-  bits[bits.length - 1] += ")";
+  const meta = [`${t.priority} priority`];
+  if (t.status === "done") {
+    if (t.completed_at) meta.push(`completed ${t.completed_at.slice(0, 10)}`);
+  } else if (t.due_date) meta.push(`due ${t.due_date}${t.due_date < today ? " OVERDUE" : ""}`);
   const d = t.description.replace(/\s+/g, " ").trim();
-  return `  - ${bits.join(" ")}${d ? `: ${d.slice(0, 100)}` : ""}`;
+  return `  - [${STATUS[t.status]}] ${t.title} (${meta.join(", ")})${d ? `: ${d.slice(0, 100)}` : ""}`;
+}
+
+function recentDone(list: Task[], today: string, max: number): string[] {
+  const since = addDays(today, -RECENT_DONE_DAYS);
+  return list
+    .filter((t) => t.status === "done" && (t.completed_at ?? "").slice(0, 10) >= since)
+    .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""))
+    .slice(0, max)
+    .map((t) => taskLine(t, today));
 }
 
 /**
@@ -41,10 +54,10 @@ export function buildWorkspaceContext(question: string, today = ymd()): Workspac
   const sections: { head: string; open: string[]; done: string[] }[] = ordered.map((p) => {
     const list = byProject.get(p.id) ?? [];
     const head = `Project "${p.name}" (${p.status}${p.target_date ? `, target ${p.target_date}` : ""})${p.goals ? ` goals: ${p.goals.replace(/\s+/g, " ").slice(0, 160)}` : ""}`;
-    return { head, open: list.filter((t) => t.status !== "done").map((t) => taskLine(t, today)), done: list.filter((t) => t.status === "done").slice(0, 5).map((t) => taskLine(t, today)) };
+    return { head, open: list.filter((t) => t.status !== "done").map((t) => taskLine(t, today)), done: recentDone(list, today, RECENT_DONE_MAX) };
   });
   const loose = byProject.get(null) ?? [];
-  if (loose.length) sections.push({ head: "Tasks without a project", open: loose.filter((t) => t.status !== "done").map((t) => taskLine(t, today)), done: loose.filter((t) => t.status === "done").slice(0, 3).map((t) => taskLine(t, today)) });
+  if (loose.length) sections.push({ head: "Tasks without a project", open: loose.filter((t) => t.status !== "done").map((t) => taskLine(t, today)), done: recentDone(loose, today, 3) });
 
   // Two passes keep the budget fair: every section gets its open tasks before any finished task is added.
   let used = 0;

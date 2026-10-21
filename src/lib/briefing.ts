@@ -26,10 +26,10 @@ export function buildBriefing(todayOverride?: string): Briefing {
   const dueToday = listTasks({ due: "today", today });
   const dueSoon = listTasks({ due: "soon", today }).filter((t) => t.due_date !== today);
   const counts = captureCounts();
-  const open = (db.prepare("SELECT COUNT(*) AS c FROM tasks WHERE status <> 'done'").get() as { c: number }).c;
+  const open = (db.prepare("SELECT COUNT(*) AS c FROM tasks WHERE status <> 'done' AND deleted_at IS NULL").get() as { c: number }).c;
   const activeProjects = db
     .prepare(
-      `SELECT p.id, p.name, p.target_date, (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status <> 'done') AS open_tasks
+      `SELECT p.id, p.name, p.target_date, (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status <> 'done' AND t.deleted_at IS NULL) AS open_tasks
        FROM projects p WHERE p.status = 'active' ORDER BY p.updated_at DESC LIMIT 10`,
     )
     .all() as Briefing["activeProjects"];

@@ -40,17 +40,14 @@ export function TaskRow({ task, projectName, projects, onChange }: { task: Task;
       toast(e instanceof Error ? e.message : "Failed", "danger");
     }
   }
-  /** Tasks have no trash, so "undo" re-creates the task from what was on screen (it gets a new id and created date). */
+  /** Moves the task to the trash (kept 30 days). Undo restores the very same task, id and dates included. */
   async function remove() {
     try {
       await api(`/api/tasks/${task.id}`, { method: "DELETE" });
       onChange();
-      toast("Task deleted", "ok", {
+      toast("Task moved to trash", "ok", {
         label: "Undo",
-        onClick: () =>
-          void api("/api/tasks", {
-            body: { title: task.title, description: task.description, status: task.status, priority: task.priority, due_date: task.due_date, project_id: task.project_id, capture_id: task.capture_id },
-          }).then(onChange, () => toast("Could not restore the task", "danger")),
+        onClick: () => void api(`/api/tasks/${task.id}/restore`, { body: {} }).then(onChange, () => toast("Could not restore the task", "danger")),
       });
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed", "danger");
@@ -98,7 +95,7 @@ export function TaskRow({ task, projectName, projects, onChange }: { task: Task;
   );
 }
 
-function TaskEditDialog({ task, projects, onClose, onSaved }: { task: Task; projects?: ProjectOption[]; onClose: () => void; onSaved: () => void }) {
+export function TaskEditDialog({ task, projects, onClose, onSaved }: { task: Task; projects?: ProjectOption[]; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const formId = useId();
   const [f, setF] = useState({ title: task.title, description: task.description, status: task.status, priority: task.priority, due: task.due_date ?? "", project: task.project_id ?? "" });

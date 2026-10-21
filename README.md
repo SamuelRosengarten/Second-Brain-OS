@@ -99,11 +99,11 @@ npm run restore -- 'D:\SecondBrainOS-backups\backup-2026-10-21_20-11-54' --verif
 **Encrypted off-site copy.** Add `SBOS_BACKUP_PASSPHRASE` (12+ characters) to `.env.local`, then back up with `--encrypt`. The copy in `--copy-to` becomes one AES-256-GCM file (`backup-<time>.sbosenc`) that is safe on a cloud-synced folder or a USB stick; it is decrypted again as a check before the run counts as done. Without the passphrase it cannot be opened, so keep a copy of the passphrase somewhere that is not this PC.
 
 ```powershell
-npm run backup -- --encrypt --copy-to "$env:USERPROFILE\OneDrive\SecondBrainOS-backups" --keep 8
+npm run backup -- --copy-to 'D:\SecondBrainOS-backups' --encrypt-to "$env:USERPROFILE\OneDrive\SecondBrainOS-backups" --keep 8   # plain copy on D: + encrypted copy in OneDrive
 npm run restore -- "$env:USERPROFILE\OneDrive\SecondBrainOS-backups\backup-2026-10-21_20-11-54.sbosenc" --yes   # app stopped; works on a fresh PC too
 ```
 
-To make the weekly task encrypt, add `--encrypt` to its command (re-run the `Register-ScheduledTask` block above).
+`--encrypt-to <dir>` writes the encrypted file in addition to the plain `--copy-to` copy; `--encrypt` alone makes the `--copy-to` copy the encrypted file instead. The weekly task on this PC uses `--copy-to D:\SecondBrainOS-backups --encrypt-to <OneDrive>\SecondBrainOS-backups`, so each Sunday leaves a plain copy on D: and an encrypted, verified copy that OneDrive syncs off the machine.
 
 ## Capture from the iPhone share sheet
 
@@ -126,9 +126,9 @@ A wrong or missing token returns 401 and is throttled after 8 failures. Leave `S
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | 68 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention/encryption, share-token capture, grounded chat, safe Markdown rendering |
+| `npm test` | 87 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention/encryption, share-token capture, grounded chat, safe Markdown rendering |
 | `npm run typecheck` | TypeScript |
-| `npm run build` then `npm run e2e` | 23 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus, the web share target, and an automated axe-core WCAG 2.2 A/AA scan of every page in both themes on desktop and phone. Screenshots are saved to `test-results/shots/` |
+| `npm run build` then `npm run e2e` | 24 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus, the web share target, and an automated axe-core WCAG 2.2 A/AA scan of every page in both themes on desktop and phone. Screenshots are saved to `test-results/shots/` |
 | `npm run smoke` | HTTP end-to-end against a running instance, with real Ollama (see docs/SETUP.md) |
 | `npm run audit` | Dependency audit |
 
@@ -137,6 +137,7 @@ A wrong or missing token returns 401 and is throttled after 8 failures. Leave `S
 Dark-first (light theme follows the OS or Settings), compact, one icon set (lucide). Violet accent is reserved for active navigation, primary actions, focus and AI-generated content.
 
 - **Ctrl+K (⌘K)** command palette: jump to any page, create a capture/note/task/project, open a project, find notes by title, or run a full library search / Ask AI. Every entry is a real action.
+- **Pipeline** (sidebar, More, or Ctrl+K) lays every project and task out by due date. *Timeline*: one swimlane per project, tasks as markers on their due date (color and icon: overdue, due soon, in progress, to do, done), a Today line, week gridlines, a workload strip that shows busy days, project target dates, a health badge (Behind, At risk, On track) and a progress bar per project; 2 weeks, 6 weeks or 3 months. *By due date*: columns Overdue, Today, Next 7 days, Next 30 days, Later, No date, Done lately. Click any task to edit it. Each project page also has its own timeline. The phone opens the column view first.
 - **Sidebar** (desktop, 1024px and up): New capture, search, navigation, your active projects and recent notes (real data), live Ollama status, collapsible. Below 1024px (phones and tablets) it becomes a top bar plus a bottom nav with a raised Capture button.
 - **Home** shows the date's greeting, a one-box quick capture, the briefing computed from your database, today's tasks, items awaiting review, recent notes, active projects and system status. Nothing on it is fabricated.
 - **Inbox** is a status-filtered list; each capture shows your original beside the clearly labelled, editable AI suggestion.
@@ -148,8 +149,8 @@ Dark-first (light theme follows the OS or Settings), compact, one icon set (luci
 | --- | --- |
 | Inbox | Text, ideas, tasks, links, excerpts, md/txt/pdf/image attachments. Saved before any AI runs. AI proposal (title, summary, category, tags, projects, next action, open questions, confidence) is reviewed, edited, accepted, dismissed or retried. Archive, delete with confirmation, duplicate protection. |
 | Knowledge | Notes are real `.md` files with frontmatter in `vault/`. Keyword (FTS5) + semantic hybrid search, automatic keyword fallback, import of files/folders, reindex from disk, delete moves to `vault/.trash`. |
-| Projects & Tasks | Projects with goals, status, target date, linked notes and activity. Tasks with priority, due date, filters; tap a task to edit it, move an overdue or due-today task to tomorrow, and undo a move or a delete from the toast. "Today" and "overdue" follow the clock of the device you are using, so the phone and the PC agree. Capture to task conversion only with your approval. |
-| AI Workspace | Model picker, streaming chat, conversation history, custom system prompt, library-grounded answers with numbered citations and an explicit "not enough evidence" path. |
+| Projects & Tasks | Projects with goals, status, target date, linked notes and activity. Tasks with priority, due date, filters; tap a task to edit it, move an overdue or due-today task to tomorrow, and undo a move or a delete from the toast. Deleted tasks go to a Trash (Tasks, bottom of the page) for 30 days: Undo or Restore brings back the very same task. The Pipeline page shows all projects on a timeline. "Today" and "overdue" follow the clock of the device you are using, so the phone and the PC agree. Capture to task conversion only with your approval. |
+| AI Workspace | Model picker, streaming chat, conversation history, custom system prompt, library-grounded answers with numbered citations and an explicit "not enough evidence" path. With "Answer from my library" on, the model also sees a live snapshot of your active projects and tasks (status, priority, due and overdue, tasks finished in the last 14 days), so it can answer "what is in progress for X?". **Suggest tasks** proposes tasks from your request and the conversation; you tick, edit and add the ones you want, nothing is saved before that, and reworded copies of tasks you already have are filtered out. |
 | Claude handoff | Build a Markdown context package, review it, copy or download it, open claude.ai yourself, paste Claude's answer back as a note. The app never contacts Claude. |
 | Home | Briefing computed only from local rows. No calendar is connected, and it says so. |
 | Automations | Three fixed manual jobs with status and history. No autonomous actions. |

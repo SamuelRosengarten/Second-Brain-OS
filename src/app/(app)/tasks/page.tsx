@@ -1,10 +1,10 @@
 "use client";
 import { useSearchParams } from "next/navigation";
-import { ListTodo } from "lucide-react";
+import { ListTodo, RotateCcw, Trash2 } from "lucide-react";
 import { Suspense, useMemo, useState } from "react";
-import { localToday, useApi } from "@/components/client";
+import { api, localToday, useApi } from "@/components/client";
 import { NewTask, TaskRow } from "@/components/task-list";
-import { EmptyState, ErrorBox, ListSkeleton, PageHeader, RowList, Section, Select } from "@/components/ui";
+import { Button, EmptyState, ErrorBox, ListSkeleton, PageHeader, RowList, Section, Select, useToast } from "@/components/ui";
 import type { Project, Task } from "@/lib/projects";
 
 function groupTasks(tasks: Task[], today: string) {
@@ -19,7 +19,42 @@ function groupTasks(tasks: Task[], today: string) {
   return g;
 }
 
+/** Deleted tasks stay here for 30 days. Restoring brings back the same task with all its fields. */
+function TrashPanel({ onRestored }: { onRestored: () => void }) {
+  const toast = useToast();
+  const trash = useApi<{ tasks: Task[] }>("/api/tasks?trash=1");
+  const list = trash.data?.tasks ?? [];
+  async function act(id: string, kind: "restore" | "purge") {
+    try {
+      if (kind === "restore") await api(`/api/tasks/${id}/restore`, { body: {} });
+      else await api(`/api/tasks/${id}?purge=1`, { method: "DELETE" });
+      await trash.reload();
+      if (kind === "restore") onRestored();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed", "danger");
+    }
+  }
+  return (
+    <Section title={`Trash · ${list.length}`}>
+      {list.length === 0 ? (
+        <p className="text-sm text-muted">Trash is empty. Deleted tasks are kept here for 30 days.</p>
+      ) : (
+        <RowList>
+          {list.map((t) => (
+            <li key={t.id} className="flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0">
+              <span className="min-w-0 flex-1 truncate text-[13.5px] text-muted">{t.title}</span>
+              <Button size="sm" onClick={() => void act(t.id, "restore")} aria-label={`Restore ${t.title}`}><RotateCcw size={14} aria-hidden />Restore</Button>
+              <Button size="sm" variant="danger" onClick={() => void act(t.id, "purge")} aria-label={`Delete forever: ${t.title}`}><Trash2 size={14} aria-hidden />Delete forever</Button>
+            </li>
+          ))}
+        </RowList>
+      )}
+    </Section>
+  );
+}
+
 function Tasks() {
+  const [showTrash, setShowTrash] = useState(false);
   const sp = useSearchParams();
   const [status, setStatus] = useState(sp.get("status") ?? "open");
   const [priority, setPriority] = useState("");
@@ -87,6 +122,10 @@ function Tasks() {
             </Section>
           ),
         )}
+      </div>
+      <div className="mt-8">
+        <Button size="sm" variant="ghost" aria-expanded={showTrash} onClick={() => setShowTrash((v) => !v)}><Trash2 size={14} aria-hidden />{showTrash ? "Hide trash" : "Show trash"}</Button>
+        {showTrash && <div className="mt-3"><TrashPanel onRestored={() => void reload()} /></div>}
       </div>
     </div>
   );
