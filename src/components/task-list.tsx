@@ -1,8 +1,9 @@
 "use client";
-import { Circle, CircleCheck, Flag, FolderKanban, Play, Plus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { api } from "./client";
-import { Badge, Button, cx, IconButton, Input, Select, useToast } from "./ui";
+import { CalendarClock, Circle, CircleCheck, Flag, FolderKanban, Play, Plus, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { api, localToday } from "./client";
+import { Badge, Button, cx, Dialog, Field, IconButton, Input, Select, Textarea, useToast } from "./ui";
+import { addDays } from "@/lib/dates";
 import type { Task } from "@/lib/projects";
 
 const PRIORITY: Record<Task["priority"], { label: string; cls: string }> = {
@@ -11,8 +12,11 @@ const PRIORITY: Record<Task["priority"], { label: string; cls: string }> = {
   low: { label: "Low", cls: "text-faint" },
 };
 
-export function TaskRow({ task, projectName, onChange }: { task: Task; projectName?: string; onChange: () => void }) {
+type ProjectOption = { id: string; name: string };
+
+export function TaskRow({ task, projectName, projects, onChange }: { task: Task; projectName?: string; projects?: ProjectOption[]; onChange: () => void }) {
   const toast = useToast();
+  const [editing, setEditing] = useState(false);
   const done = task.status === "done";
   async function patch(body: object) {
     try {
@@ -22,11 +26,42 @@ export function TaskRow({ task, projectName, onChange }: { task: Task; projectNa
       toast(e instanceof Error ? e.message : "Failed", "danger");
     }
   }
-  const today = new Date().toLocaleDateString("sv");
+  /** Moves the due date and offers to put it back. */
+  async function snooze(to: string) {
+    const from = task.due_date;
+    try {
+      await api(`/api/tasks/${task.id}`, { method: "PATCH", body: { due_date: to } });
+      onChange();
+      toast("Moved to tomorrow", "ok", {
+        label: "Undo",
+        onClick: () => void api(`/api/tasks/${task.id}`, { method: "PATCH", body: { due_date: from } }).then(onChange, () => toast("Could not undo", "danger")),
+      });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed", "danger");
+    }
+  }
+  /** Tasks have no trash, so "undo" re-creates the task from what was on screen (it gets a new id and created date). */
+  async function remove() {
+    try {
+      await api(`/api/tasks/${task.id}`, { method: "DELETE" });
+      onChange();
+      toast("Task deleted", "ok", {
+        label: "Undo",
+        onClick: () =>
+          void api("/api/tasks", {
+            body: { title: task.title, description: task.description, status: task.status, priority: task.priority, due_date: task.due_date, project_id: task.project_id, capture_id: task.capture_id },
+          }).then(onChange, () => toast("Could not restore the task", "danger")),
+      });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed", "danger");
+    }
+  }
+  const today = localToday();
   const overdue = !done && !!task.due_date && task.due_date < today;
   const isToday = !done && task.due_date === today;
   return (
-    <li className="group flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0 hover:bg-hover/60">
+    // Phone: the title gets its own line and the badges/actions sit under it. From `sm` up everything is one row.
+    <li className="group flex flex-wrap items-center gap-x-3 border-b border-line px-3 py-2 last:border-b-0 hover:bg-hover/60 sm:flex-nowrap">
       <button
         aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
         aria-pressed={done}
@@ -35,37 +70,111 @@ export function TaskRow({ task, projectName, onChange }: { task: Task; projectNa
       >
         {done ? <CircleCheck size={18} aria-hidden strokeWidth={1.75} /> : <Circle size={18} aria-hidden strokeWidth={1.5} />}
       </button>
-      <div className="min-w-0 flex-1">
-        <p className={cx("truncate text-[13.5px]", done && "text-faint line-through")}>{task.title}</p>
-        {task.description && <p className="truncate text-xs text-faint">{task.description}</p>}
+      <button type="button" onClick={() => setEditing(true)} title="Edit task" className="min-h-10 min-w-0 flex-1 rounded-md text-left lg:min-h-0">
+        <span className={cx("block truncate text-[13.5px]", done && "text-faint line-through")}>{task.title}</span>
+        {task.description && <span className="block truncate text-xs text-faint">{task.description}</span>}
+      </button>
+      <div className="flex w-full min-w-0 items-center gap-2 pb-0.5 pl-[3.25rem] sm:w-auto sm:shrink-0 sm:pb-0 sm:pl-0">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-none">
+          {projectName && <span className="hidden items-center gap-1 text-xs text-faint sm:flex"><FolderKanban size={12} aria-hidden />{projectName}</span>}
+          {!done && task.priority !== "medium" && (
+            <span className={cx("flex items-center gap-1 text-xs", PRIORITY[task.priority].cls)} title={`${PRIORITY[task.priority].label} priority`}>
+              <Flag size={12} aria-hidden />
+              <span className="hidden sm:inline">{PRIORITY[task.priority].label}</span>
+              <span className="sr-only sm:hidden">{PRIORITY[task.priority].label} priority</span>
+            </span>
+          )}
+          {task.status === "doing" && <Badge tone="info">In progress</Badge>}
+          {task.due_date && (overdue ? <Badge tone="danger">Overdue · <span className="tnum"><span className="sm:hidden">{task.due_date.slice(5)}</span><span className="hidden sm:inline">{task.due_date}</span></span></Badge> : isToday ? <Badge tone="accent">Today</Badge> : <span className="tnum text-xs text-faint">{task.due_date}</span>)}
+        </div>
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          {(overdue || isToday) && <IconButton icon={CalendarClock} label={`Move ${task.title} to tomorrow`} onClick={() => void snooze(addDays(today, 1))} />}
+          {!done && task.status !== "doing" && <IconButton icon={Play} label={`Start ${task.title}`} onClick={() => void patch({ status: "doing" })} className="lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100" />}
+          <IconButton icon={Trash2} label={`Delete ${task.title}`} className="lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100" onClick={() => void remove()} />
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {projectName && <span className="hidden items-center gap-1 text-xs text-faint sm:flex"><FolderKanban size={12} aria-hidden />{projectName}</span>}
-        {!done && task.priority !== "medium" && (
-          <span className={cx("flex items-center gap-1 text-xs", PRIORITY[task.priority].cls)} title={`${PRIORITY[task.priority].label} priority`}>
-            <Flag size={12} aria-hidden />
-            <span className="hidden sm:inline">{PRIORITY[task.priority].label}</span>
-            <span className="sr-only sm:hidden">{PRIORITY[task.priority].label} priority</span>
-          </span>
-        )}
-        {task.status === "doing" && <Badge tone="info">In progress</Badge>}
-        {task.due_date && (overdue ? <Badge tone="danger">Overdue · <span className="tnum">{task.due_date}</span></Badge> : isToday ? <Badge tone="accent">Today</Badge> : <span className="tnum text-xs text-faint">{task.due_date}</span>)}
-        {!done && task.status !== "doing" && <IconButton icon={Play} label={`Start ${task.title}`} onClick={() => void patch({ status: "doing" })} className="lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100" />}
-        <IconButton
-          icon={Trash2}
-          label={`Delete ${task.title}`}
-          className="lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-          onClick={async () => {
-            try {
-              await api(`/api/tasks/${task.id}`, { method: "DELETE" });
-              onChange();
-            } catch (e) {
-              toast(e instanceof Error ? e.message : "Failed", "danger");
-            }
-          }}
-        />
-      </div>
+      {editing && <TaskEditDialog task={task} projects={projects} onClose={() => setEditing(false)} onSaved={onChange} />}
     </li>
+  );
+}
+
+function TaskEditDialog({ task, projects, onClose, onSaved }: { task: Task; projects?: ProjectOption[]; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const formId = useId();
+  const [f, setF] = useState({ title: task.title, description: task.description, status: task.status, priority: task.priority, due: task.due_date ?? "", project: task.project_id ?? "" });
+  const [busy, setBusy] = useState(false);
+  const today = localToday();
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!f.title.trim() || busy) return;
+    setBusy(true);
+    try {
+      await api(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: { title: f.title, description: f.description, status: f.status, priority: f.priority, due_date: f.due || null, ...(projects ? { project_id: f.project || null } : {}) },
+      });
+      toast("Task updated");
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed", "danger");
+      setBusy(false);
+    }
+  }
+  const quick: { label: string; value: string }[] = [
+    { label: "Today", value: today },
+    { label: "Tomorrow", value: addDays(today, 1) },
+    { label: "Next week", value: addDays(today, 7) },
+    { label: "No date", value: "" },
+  ];
+  return (
+    <Dialog
+      open
+      noKeyboardOnTouch
+      onClose={onClose}
+      title="Edit task"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form={formId} variant="primary" loading={busy} disabled={!f.title.trim()}>Save</Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={save} className="space-y-3">
+        <Field label="Title"><Input value={f.title} maxLength={300} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
+        <Field label="Notes"><Textarea rows={2} value={f.description} maxLength={5000} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Status">
+            <Select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as Task["status"] })}>
+              <option value="todo">To do</option>
+              <option value="doing">In progress</option>
+              <option value="done">Done</option>
+            </Select>
+          </Field>
+          <Field label="Priority">
+            <Select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value as Task["priority"] })}>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </Select>
+          </Field>
+        </div>
+        <Field label="Due date"><Input type="date" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })} className="tnum" /></Field>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Quick due dates">
+          {quick.map((q) => (
+            <Button key={q.label} size="sm" variant={f.due === q.value ? "primary" : "secondary"} aria-pressed={f.due === q.value} onClick={() => setF({ ...f, due: q.value })}>{q.label}</Button>
+          ))}
+        </div>
+        {projects && (
+          <Field label="Project">
+            <Select value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })}>
+              <option value="">No project</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+          </Field>
+        )}
+      </form>
+    </Dialog>
   );
 }
 

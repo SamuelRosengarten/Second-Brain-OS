@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Circle, FileText, FolderKanban, Inbox, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { QuickCapture } from "@/components/quick-capture";
-import { api, fmtDate, useApi } from "@/components/client";
+import { api, fmtDate, localToday, useApi } from "@/components/client";
 import { Badge, EmptyState, ErrorBox, IconButton, ListSkeleton, rowClass, RowList, Section, useToast } from "@/components/ui";
 import type { Briefing } from "@/lib/briefing";
 
@@ -64,7 +64,7 @@ function SystemStatus() {
 }
 
 export default function HomePage() {
-  const { data: b, error, loading, reload } = useApi<Briefing>("/api/briefing");
+  const { data: b, error, loading, reload } = useApi<Briefing>(`/api/briefing?today=${localToday()}`);
   const toast = useToast();
 
   async function complete(id: string) {

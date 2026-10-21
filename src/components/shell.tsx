@@ -172,7 +172,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
           <div className="flex min-w-0 flex-1 flex-col">
             {/* ---------- mobile top bar ---------- */}
-            <header className="safe-top sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-line bg-bg/95 px-3 backdrop-blur lg:hidden">
+            <header className="safe-top sticky top-0 z-30 flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-line bg-bg/95 px-3 backdrop-blur lg:hidden">
               <Link href="/" aria-label="Second Brain OS home" className="grid size-7 place-items-center rounded-md bg-accent/15 text-accent">
                 <Brain size={16} aria-hidden strokeWidth={1.75} />
               </Link>

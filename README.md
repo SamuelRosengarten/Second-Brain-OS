@@ -55,7 +55,7 @@ Never port-forward 3000 or 11434 and never use `tailscale funnel` (public).
 2. In the Tailscale admin console, open **DNS**, make sure **MagicDNS** is on and click **Enable HTTPS**.
 3. On the PC, publish the local app to your tailnet only: `tailscale serve --bg 3000`, then check `tailscale serve status` shows `https://<machine>.<tailnet>.ts.net (tailnet only)` pointing at `http://127.0.0.1:3000`.
 4. In `.env.local` set `SBOS_SECURE_COOKIES=1` and `SBOS_ALLOWED_ORIGINS=https://<machine>.<tailnet>.ts.net`, then restart the app.
-5. On the iPhone, with the Tailscale app connected, open `https://<machine>.<tailnet>.ts.net` in Safari and sign in. Share, then Add to Home Screen.
+5. On the iPhone, with the Tailscale app connected, open `https://<machine>.<tailnet>.ts.net` in Safari and sign in. Share, then Add to Home Screen. It opens full screen with its own icon (web app manifest). If you added it before this was set up, delete the old shortcut and add it again; an installed web app keeps its own sign-in, so you sign in once more.
 
 `localhost` on the phone is the phone itself and will never work. A `502 Bad Gateway` means the app is not running on the PC. The PC must be on, logged in, and Ollama running for AI features. Details in [docs/SECURITY.md](docs/SECURITY.md).
 
@@ -94,9 +94,9 @@ A copy on the same physical disk does not protect against disk failure; use a di
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | 55 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat, safe Markdown rendering |
+| `npm test` | 60 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat, safe Markdown rendering |
 | `npm run typecheck` | TypeScript |
-| `npm run build` then `npm run e2e` | 13 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus. Screenshots are saved to `test-results/shots/` |
+| `npm run build` then `npm run e2e` | 18 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus. Screenshots are saved to `test-results/shots/` |
 | `npm run smoke` | HTTP end-to-end against a running instance, with real Ollama (see docs/SETUP.md) |
 | `npm run audit` | Dependency audit |
 
@@ -116,7 +116,7 @@ Dark-first (light theme follows the OS or Settings), compact, one icon set (luci
 | --- | --- |
 | Inbox | Text, ideas, tasks, links, excerpts, md/txt/pdf/image attachments. Saved before any AI runs. AI proposal (title, summary, category, tags, projects, next action, open questions, confidence) is reviewed, edited, accepted, dismissed or retried. Archive, delete with confirmation, duplicate protection. |
 | Knowledge | Notes are real `.md` files with frontmatter in `vault/`. Keyword (FTS5) + semantic hybrid search, automatic keyword fallback, import of files/folders, reindex from disk, delete moves to `vault/.trash`. |
-| Projects & Tasks | Projects with goals, status, target date, linked notes and activity. Tasks with priority, due date, filters. Capture to task conversion only with your approval. |
+| Projects & Tasks | Projects with goals, status, target date, linked notes and activity. Tasks with priority, due date, filters; tap a task to edit it, move an overdue or due-today task to tomorrow, and undo a move or a delete from the toast. "Today" and "overdue" follow the clock of the device you are using, so the phone and the PC agree. Capture to task conversion only with your approval. |
 | AI Workspace | Model picker, streaming chat, conversation history, custom system prompt, library-grounded answers with numbered citations and an explicit "not enough evidence" path. |
 | Claude handoff | Build a Markdown context package, review it, copy or download it, open claude.ai yourself, paste Claude's answer back as a note. The app never contacts Claude. |
 | Home | Briefing computed only from local rows. No calendar is connected, and it says so. |

@@ -2,13 +2,12 @@
 import { useSearchParams } from "next/navigation";
 import { ListTodo } from "lucide-react";
 import { Suspense, useMemo, useState } from "react";
-import { useApi } from "@/components/client";
+import { localToday, useApi } from "@/components/client";
 import { NewTask, TaskRow } from "@/components/task-list";
 import { EmptyState, ErrorBox, ListSkeleton, PageHeader, RowList, Section, Select } from "@/components/ui";
 import type { Project, Task } from "@/lib/projects";
 
-function groupTasks(tasks: Task[]) {
-  const today = new Date().toLocaleDateString("sv");
+function groupTasks(tasks: Task[], today: string) {
   const g = { overdue: [] as Task[], today: [] as Task[], upcoming: [] as Task[], none: [] as Task[], done: [] as Task[] };
   for (const t of tasks) {
     if (t.status === "done") g.done.push(t);
@@ -29,10 +28,13 @@ function Tasks() {
   if (status) qs.set("status", status);
   if (priority) qs.set("priority", priority);
   if (due) qs.set("due", due);
+  const today = localToday();
+  qs.set("today", today);
   const { data, error, loading, reload } = useApi<{ tasks: Task[] }>(`/api/tasks?${qs}`);
   const projects = useApi<{ projects: Project[] }>("/api/projects");
   const names = new Map((projects.data?.projects ?? []).map((p) => [p.id, p.name]));
-  const groups = useMemo(() => groupTasks(data?.tasks ?? []), [data]);
+  const activeProjects = (projects.data?.projects ?? []).filter((p) => p.status !== "archived");
+  const groups = useMemo(() => groupTasks(data?.tasks ?? [], today), [data, today]);
   const sections: { key: keyof typeof groups; title: string }[] = [
     { key: "overdue", title: "Overdue" },
     { key: "today", title: "Today" },
@@ -45,7 +47,7 @@ function Tasks() {
     <div className="mx-auto max-w-3xl">
       <PageHeader title="Tasks" subtitle="Simple and personal. Tasks can come from the inbox or be added here." />
       <div className="mb-6 rounded-lg border border-line bg-surface p-3">
-        <NewTask autoFocus={sp.get("new") === "1"} projects={(projects.data?.projects ?? []).filter((p) => p.status !== "archived")} onCreated={() => void reload()} />
+        <NewTask autoFocus={sp.get("new") === "1"} projects={activeProjects} onCreated={() => void reload()} />
       </div>
       <div className="mb-5 flex flex-wrap gap-2">
         <Select aria-label="Status filter" value={status} onChange={(e) => setStatus(e.target.value)} className="w-36">
@@ -79,7 +81,7 @@ function Tasks() {
             <Section key={key} title={`${title} · ${groups[key].length}`}>
               <RowList>
                 {groups[key].map((t) => (
-                  <TaskRow key={t.id} task={t} projectName={t.project_id ? names.get(t.project_id) : undefined} onChange={() => void reload()} />
+                  <TaskRow key={t.id} task={t} projectName={t.project_id ? names.get(t.project_id) : undefined} projects={activeProjects} onChange={() => void reload()} />
                 ))}
               </RowList>
             </Section>

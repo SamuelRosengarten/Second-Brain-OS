@@ -205,21 +205,25 @@ export function Loading({ label = "Loading" }: { label?: string }) {
 
 /* ---------- overlays ---------- */
 /** Native <dialog>: focus trapping, Escape-to-close and focus restore are handled by the browser. */
-export function Dialog({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children?: ReactNode; footer?: ReactNode }) {
+/** `noKeyboardOnTouch`: do not auto-focus the first field on touch screens, so opening the dialog does not raise the keyboard. */
+export function Dialog({ open, onClose, title, children, footer, noKeyboardOnTouch }: { open: boolean; onClose: () => void; title: string; children?: ReactNode; footer?: ReactNode; noKeyboardOnTouch?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      d.showModal();
+      if (noKeyboardOnTouch && window.matchMedia("(pointer: coarse)").matches) (document.activeElement as HTMLElement | null)?.blur();
+    }
     if (!open && d.open) d.close();
-  }, [open]);
+  }, [open, noKeyboardOnTouch]);
   return (
     <dialog ref={ref} onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={title} className="m-auto max-h-[90dvh] w-[min(94vw,30rem)] overflow-y-auto rounded-xl border border-line bg-surface2 p-0 shadow-2xl">
       <div className="space-y-3 p-5">
         <h2 className="text-base font-semibold">{title}</h2>
         <div className="text-[13px] text-muted">{children}</div>
       </div>
-      {footer && <div className="flex justify-end gap-2 border-t border-line p-3">{footer}</div>}
+      {footer && <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-surface2 p-3">{footer}</div>}
     </dialog>
   );
 }
@@ -243,15 +247,17 @@ export function ConfirmDialog({ open, title, message, confirmLabel = "Delete", b
 }
 
 /* ---------- toasts ---------- */
-type Toast = { id: number; text: string; tone: "ok" | "danger" };
-const ToastCtx = createContext<(text: string, tone?: Toast["tone"]) => void>(() => undefined);
+export type ToastAction = { label: string; onClick: () => void };
+type Toast = { id: number; text: string; tone: "ok" | "danger"; action?: ToastAction };
+const ToastCtx = createContext<(text: string, tone?: Toast["tone"], action?: ToastAction) => void>(() => undefined);
 export const useToast = () => useContext(ToastCtx);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
-  const push = useCallback((text: string, tone: Toast["tone"] = "ok") => {
+  const push = useCallback((text: string, tone: Toast["tone"] = "ok", action?: ToastAction) => {
     const id = Date.now() + Math.random();
-    setItems((i) => [...i, { id, text, tone }]);
-    setTimeout(() => setItems((i) => i.filter((t) => t.id !== id)), tone === "danger" ? 7000 : 3500);
+    const dismiss = () => setItems((i) => i.filter((t) => t.id !== id));
+    setItems((i) => [...i, { id, text, tone, action: action && { label: action.label, onClick: () => { dismiss(); action.onClick(); } } }]);
+    setTimeout(dismiss, action || tone === "danger" ? 7000 : 3500);
   }, []);
   return (
     <ToastCtx.Provider value={push}>
@@ -261,6 +267,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div key={t.id} className={cx("pointer-events-auto flex max-w-md items-start gap-2 rounded-lg border bg-surface2 px-3.5 py-2.5 text-[13px] shadow-xl", t.tone === "danger" ? "border-danger/50" : "border-line")}>
             {t.tone === "danger" ? <TriangleAlert size={16} aria-hidden className="mt-px shrink-0 text-danger" /> : <CircleCheck size={16} aria-hidden className="mt-px shrink-0 text-ok" />}
             <span>{t.text}</span>
+            {t.action && (
+              <button type="button" onClick={t.action.onClick} className="-my-1 -mr-1.5 ml-2 min-h-9 shrink-0 rounded-md px-2.5 text-[13px] font-semibold text-accent hover:bg-hover">
+                {t.action.label}
+              </button>
+            )}
           </div>
         ))}
       </div>

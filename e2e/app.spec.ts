@@ -173,3 +173,94 @@ test("note editor: write, safe Markdown preview, save, and rendered view", async
   await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
   await expect(page.locator(".md h2")).toHaveText("Plan");
 });
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+test("tasks: edit, move to tomorrow with undo, delete with undo", async ({ page }) => {
+  await login(page);
+  await page.goto("/tasks");
+  const today = ymd(new Date());
+  const tomorrow = ymd(new Date(Date.now() + 86_400_000));
+  await page.getByLabel("New task title").fill("Edit me");
+  await page.getByLabel("Due date").fill(today);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const row = page.locator("main li").filter({ hasText: "Edit me" });
+  await expect(row.getByText("Today", { exact: true })).toBeVisible();
+
+  // snooze, then undo
+  await row.getByRole("button", { name: "Move Edit me to tomorrow" }).click();
+  await expect(row.getByText(tomorrow)).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(row.getByText("Today", { exact: true })).toBeVisible();
+
+  // edit every field that matters
+  await row.getByRole("button", { name: "Edit me", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit task" });
+  await dialog.getByLabel("Title").fill("Edited task");
+  await dialog.getByLabel("Notes").fill("details here");
+  await dialog.getByLabel("Priority").selectOption("high");
+  await dialog.getByRole("button", { name: "Tomorrow" }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  const edited = page.locator("main li").filter({ hasText: "Edited task" });
+  await expect(edited.getByText("details here")).toBeVisible();
+  await expect(edited.getByText(tomorrow)).toBeVisible();
+  await expect(edited.getByText("High", { exact: true }).first()).toBeVisible();
+
+  // delete, then undo: the task comes back with the same fields
+  await edited.getByRole("button", { name: "Delete Edited task" }).click();
+  await expect(page.locator("main li").filter({ hasText: "Edited task" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  const restored = page.locator("main li").filter({ hasText: "Edited task" });
+  await expect(restored.getByText(tomorrow)).toBeVisible();
+  await expect(restored.getByText("details here")).toBeVisible();
+
+  // clean up (no undo this time)
+  await restored.getByRole("button", { name: "Delete Edited task" }).click();
+  await expect(page.locator("main li").filter({ hasText: "Edited task" })).toHaveCount(0);
+});
+
+// Two zones a day apart from each other, so at least one differs from the server's calendar date at any hour.
+for (const timezoneId of ["Pacific/Kiritimati", "Pacific/Pago_Pago"]) {
+  test.describe(`device in ${timezoneId}`, () => {
+    test.use({ timezoneId });
+    test("Home and Tasks use the device's own 'today'", async ({ page }) => {
+      await login(page);
+      await page.goto("/tasks");
+      const deviceToday = await page.evaluate(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      });
+      await page.getByLabel("New task title").fill(`Due on the device today ${timezoneId}`);
+      await page.getByLabel("Due date").fill(deviceToday);
+      await page.getByRole("button", { name: "Add", exact: true }).click();
+      const row = page.locator("main li").filter({ hasText: `Due on the device today ${timezoneId}` });
+      await expect(row.getByText("Today", { exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /^Today · 1$/ })).toBeVisible();
+
+      await page.goto("/");
+      await expect(page.getByText(/\b1 due today/)).toBeVisible();
+      await expect(page.getByText(/\b0 overdue/)).toBeVisible();
+
+      await page.goto("/tasks");
+      await page.locator("main li").filter({ hasText: `Due on the device today ${timezoneId}` }).getByRole("button", { name: /^Delete / }).click();
+    });
+  });
+}
+
+test("installable on a home screen: manifest and icons are public and valid", async ({ request, page }) => {
+  const res = await request.get("/manifest.webmanifest");
+  expect(res.ok()).toBe(true);
+  const m = await res.json();
+  expect(m).toMatchObject({ display: "standalone", start_url: "/", name: "Second Brain OS" });
+  for (const icon of m.icons as { src: string; type: string }[]) {
+    const r = await request.get(icon.src);
+    expect(r.ok(), icon.src).toBe(true);
+    expect(r.headers()["content-type"]).toContain(icon.type);
+  }
+  expect((await request.get("/apple-touch-icon.png")).ok()).toBe(true);
+  await page.goto("/login");
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute("href", /apple-touch-icon\.png/);
+  await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute("content", "Second Brain");
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
+});
