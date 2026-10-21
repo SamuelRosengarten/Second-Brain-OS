@@ -44,7 +44,10 @@ function Chat() {
   useEffect(() => {
     if (models.data && !model) setModel(models.data.selected);
   }, [models.data, model]);
-  useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [msgs]);
+  useEffect(() => {
+    // Block body on purpose: an effect must not return a value (React would treat it as a cleanup function).
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [msgs]);
 
   async function open(id: string) {
     try {
