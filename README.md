@@ -90,13 +90,45 @@ npm run restore -- backup-2026-10-21_02-15-36 --yes    # replaces current data; 
 
 A copy on the same physical disk does not protect against disk failure; use a different drive and occasionally an off-site or encrypted copy. Check `backup.log` in your data folder if a run looks missing.
 
+Every backup is verified right after it is made (SQLite integrity check, file count against the manifest, row counts). You can check any backup, including the copy on D:, without touching your data:
+
+```powershell
+npm run restore -- 'D:\SecondBrainOS-backups\backup-2026-10-21_20-11-54' --verify
+```
+
+**Encrypted off-site copy.** Add `SBOS_BACKUP_PASSPHRASE` (12+ characters) to `.env.local`, then back up with `--encrypt`. The copy in `--copy-to` becomes one AES-256-GCM file (`backup-<time>.sbosenc`) that is safe on a cloud-synced folder or a USB stick; it is decrypted again as a check before the run counts as done. Without the passphrase it cannot be opened, so keep a copy of the passphrase somewhere that is not this PC.
+
+```powershell
+npm run backup -- --encrypt --copy-to "$env:USERPROFILE\OneDrive\SecondBrainOS-backups" --keep 8
+npm run restore -- "$env:USERPROFILE\OneDrive\SecondBrainOS-backups\backup-2026-10-21_20-11-54.sbosenc" --yes   # app stopped; works on a fresh PC too
+```
+
+To make the weekly task encrypt, add `--encrypt` to its command (re-run the `Register-ScheduledTask` block above).
+
+## Capture from the iPhone share sheet
+
+Safari on iOS does not support the web share-target standard, so the iPhone uses a small Shortcut that posts to the app. (Chrome on Android does support it: after installing the app, "Second Brain" appears in the share sheet and opens the capture form prefilled.)
+
+1. On the PC, add a token to `.env.local` and restart the app. It can **only create captures**; it cannot read anything.
+   ```powershell
+   node -e "console.log('SBOS_CAPTURE_TOKEN=' + require('crypto').randomBytes(32).toString('base64url'))"   # paste the line into .env.local
+   ```
+2. On the iPhone, with Tailscale connected, open **Shortcuts** → **+** and add one action, **Get Contents of URL**:
+   - URL: `https://<machine>.<tailnet>.ts.net/api/share`
+   - Method: **POST**; Headers: `Authorization` = `Bearer <your token>`, `X-SBOS` = `1`
+   - Request Body: **JSON**, with two Text fields: `text` = **Shortcut Input**, `title` = **Shortcut Input → Name**
+3. Tap the shortcut's name → **Show in Share Sheet**, and allow **Safari web pages, URLs, Text**. Optionally add **Show Notification** ("Saved to Second Brain") after it.
+4. In Safari (or any app) tap Share → **your shortcut**. The item lands in the Inbox; a lone link is saved as a link capture, and AI processing starts as usual. Sharing the same thing twice is detected as a duplicate.
+
+A wrong or missing token returns 401 and is throttled after 8 failures. Leave `SBOS_CAPTURE_TOKEN` empty to switch the feature off (the endpoint then answers 404).
+
 ## Tests
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | 60 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention, grounded chat, safe Markdown rendering |
+| `npm test` | 68 unit/integration tests with a mock model: file safety, auth/CSRF, capture and failure paths, search fallback, backup/restore/retention/encryption, share-token capture, grounded chat, safe Markdown rendering |
 | `npm run typecheck` | TypeScript |
-| `npm run build` then `npm run e2e` | 18 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus. Screenshots are saved to `test-results/shots/` |
+| `npm run build` then `npm run e2e` | 23 Playwright browser tests on a scratch data folder with a fake Ollama, using your installed Google Chrome (no browser download): login, capture to note to search to task, duplicates, projects, grounded chat with citations, Claude handoff, settings/backup/sign-out, command palette, note editor with safe Markdown preview, task edit/snooze/undo, "today" in far-away timezones, phone task layout, home-screen manifest, no horizontal overflow on 10 pages at 375/390/430/768/1024/1440px, tap-target sizes, keyboard focus, the web share target, and an automated axe-core WCAG 2.2 A/AA scan of every page in both themes on desktop and phone. Screenshots are saved to `test-results/shots/` |
 | `npm run smoke` | HTTP end-to-end against a running instance, with real Ollama (see docs/SETUP.md) |
 | `npm run audit` | Dependency audit |
 
@@ -133,8 +165,8 @@ Dark-first (light theme follows the OS or Settings), compact, one icon set (luci
 | `npm run e2e` | Playwright browser tests (build first; see Tests below) |
 | `npm run smoke` | End-to-end HTTP test against a running instance (see docs/SETUP.md) |
 | `npm run set-password` | Set or rotate the login password (invalidates sessions) |
-| `npm run backup [-- --copy-to <dir> --keep <n>]` / `npm run export` | Create a backup (optionally copy to another drive, prune old ones) / export Markdown + JSON |
-| `npm run restore -- <name> --yes` | Restore a backup (app must be stopped) |
+| `npm run backup [-- --copy-to <dir> --keep <n> --encrypt]` / `npm run export` | Create and verify a backup (optionally copy it to another drive, encrypted, and prune old ones) / export Markdown + JSON |
+| `npm run restore -- <name, folder or file.sbosenc> [--verify] --yes` | Verify only, or restore a backup from anywhere (app must be stopped) |
 | `npm run audit` | Dependency vulnerability audit |
 
 ## Documents

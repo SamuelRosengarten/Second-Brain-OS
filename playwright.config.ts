@@ -28,7 +28,7 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:3100", channel: "chrome", trace: "retain-on-failure" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testIgnore: /mobile\.spec\.ts/ },
-    { name: "phone", use: { ...devices["Pixel 7"], channel: "chrome" }, testMatch: /mobile\.spec\.ts/ },
+    { name: "phone", use: { ...devices["Pixel 7"], channel: "chrome" }, testMatch: /(mobile|a11y)\.spec\.ts/ },
   ],
   webServer: [
     { command: "node e2e/fake-ollama.mjs", url: "http://127.0.0.1:11500/api/tags", env, reuseExistingServer: false },

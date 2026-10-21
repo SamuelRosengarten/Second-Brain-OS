@@ -21,6 +21,10 @@ Scope: a single-user system on a home PC, reached from the same PC and from an i
 | Dependencies | `npm audit --omit=dev`: 0 vulnerabilities at the time of the first release check | `npm run audit` |
 | AI boundaries | Models only produce text/JSON proposals. They get no tools, no shell, no file access. Jobs are a fixed enum. Nothing is saved, created or sent without a user click. Library content is never sent to a cloud model; the Claude workflow is a manual copy/download | design |
 
+## Share-sheet capture token
+
+`POST /api/share` is the only route that accepts something other than the login cookie. It requires `Authorization: Bearer <SBOS_CAPTURE_TOKEN>` (32+ characters, compared in constant time, same 8-failures-per-15-minutes throttle as login) plus the usual `X-SBOS` header, is checked before the body is read, and can only create an inbox capture (saved first, AI proposal reviewed by you as always). Without a configured token it answers 404. The token lives only in `.env.local` and in the iPhone Shortcut; rotate it by changing the value in both. Anyone holding it can add junk to your inbox, nothing more. Verified by unit tests (disabled, wrong/missing/cookie-only token, throttling, duplicates).
+
 ## Remote access (iPhone)
 
 Use Tailscale only. Never port-forward 3000 or 11434.
@@ -42,7 +46,7 @@ HTTPS matters for iOS features such as the clipboard API. Until you have done th
 
 - Single user, single password, no MFA. Tailscale device approval is the real perimeter.
 - Login throttling is per process and resets on restart.
-- Data at rest is not encrypted by the app; use BitLocker for the disk and for backups copied elsewhere.
+- Data at rest is not encrypted by the app; use BitLocker for the disk. Backups copied elsewhere can be encrypted with `npm run backup -- --encrypt` (AES-256-GCM, scrypt key from `SBOS_BACKUP_PASSPHRASE`); the passphrase sits in `.env.local` on this PC, so it protects the off-site copy, not a stolen PC.
 - The Ollama API has no authentication of its own; it must stay on localhost.
 - Scanned PDFs and images have no OCR; their content is not searchable.
 - A malicious PDF could in principle target the parser (`unpdf`); only import documents you trust.

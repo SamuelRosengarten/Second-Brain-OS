@@ -14,11 +14,11 @@ const KINDS = [
   { v: "excerpt", l: "Pasted excerpt" },
 ];
 
-export function CaptureForm({ onSaved, compact }: { onSaved?: (r: CreateCaptureResult) => void; compact?: boolean }) {
+export function CaptureForm({ onSaved, compact, initial }: { onSaved?: (r: CreateCaptureResult) => void; compact?: boolean; initial?: { content?: string; url?: string } }) {
   const toast = useToast();
-  const [kind, setKind] = useState("idea");
-  const [content, setContent] = useState("");
-  const [url, setUrl] = useState("");
+  const [kind, setKind] = useState(initial?.url && !initial.content ? "link" : "idea");
+  const [content, setContent] = useState(initial?.content ?? "");
+  const [url, setUrl] = useState(initial?.url ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [process, setProcess] = useState(true);
   const [busy, setBusy] = useState(false);

@@ -13,6 +13,7 @@ import { getNote, listNotes } from "../src/lib/notes.ts";
 import { setProvider } from "../src/lib/ollama.ts";
 import { buildContextPackage } from "../src/lib/claude-handoff.ts";
 import { search } from "../src/lib/search.ts";
+import { POST } from "../src/app/api/share/route.ts";
 import { cleanup, fakeProvider, freshEnv } from "./helpers.ts";
 
 let dir: string;
@@ -152,5 +153,44 @@ describe("Claude handoff", () => {
     expect(pkg.markdown).toContain("What next?");
     expect(pkg.included).toHaveLength(1);
     expect(() => buildContextPackage({ noteIds: [], question: "x" })).toThrow();
+  });
+});
+
+describe("share capture token", () => {
+  const share = POST;
+  const call = (headers: Record<string, string>, body: unknown) =>
+    share(new Request("http://localhost:3000/api/share", { method: "POST", headers: { host: "localhost:3000", "x-sbos": "1", ...headers }, body: JSON.stringify(body) }));
+  const TOKEN = "t".repeat(40);
+
+  it("is disabled until a long token is configured", async () => {
+    delete process.env.SBOS_CAPTURE_TOKEN;
+    expect((await call({ authorization: `Bearer ${TOKEN}` }, { text: "hi" })).status).toBe(404);
+    process.env.SBOS_CAPTURE_TOKEN = "short";
+    expect((await call({ authorization: "Bearer short" }, { text: "hi" })).status).toBe(404);
+  });
+  it("rejects a missing or wrong token and does not save anything", async () => {
+    process.env.SBOS_CAPTURE_TOKEN = TOKEN;
+    expect((await call({}, { text: "hi" })).status).toBe(401);
+    expect((await call({ authorization: `Bearer ${"x".repeat(40)}` }, { text: "hi" })).status).toBe(401);
+    expect((await call({ cookie: "sbos_session=anything" }, { text: "hi" })).status).toBe(401);
+  });
+  it("saves text, and treats a lone link as a link capture", async () => {
+    process.env.SBOS_CAPTURE_TOKEN = TOKEN;
+    const auth = { authorization: `Bearer ${TOKEN}` };
+    const a = await call(auth, { title: "Idea", text: "Try a standing desk" });
+    expect(a.status).toBe(201);
+    const b = await call(auth, { text: "https://example.com/page", title: "A page" });
+    expect(b.status).toBe(201);
+    const { getCapture } = await import("../src/lib/captures.ts");
+    const cap = getCapture(((await b.json()) as { id: string }).id)!;
+    expect(cap.kind).toBe("link");
+    expect(cap.url).toBe("https://example.com/page");
+    expect((await call(auth, { text: "https://example.com/page", title: "A page" })).status).toBe(200); // duplicate
+    expect((await call(auth, {})).status).toBe(400);
+  });
+  it("throttles repeated bad tokens", async () => {
+    process.env.SBOS_CAPTURE_TOKEN = TOKEN;
+    for (let i = 0; i < 8; i++) await call({ authorization: "Bearer nope" }, { text: "x" });
+    expect((await call({ authorization: `Bearer ${TOKEN}` }, { text: "x" })).status).toBe(429);
   });
 });

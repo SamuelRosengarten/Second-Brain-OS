@@ -77,8 +77,8 @@ test("keyboard: skip link, visible focus ring, and palette opens from the sideba
   });
   expect(outline.style).not.toBe("none");
   expect(outline.width).toBeGreaterThanOrEqual(2);
-  await page.getByRole("button", { name: "Open command palette" }).click();
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Search commands and notes" })).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Open command palette" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Search", exact: true })).toBeFocused();
 });

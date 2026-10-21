@@ -68,7 +68,15 @@ npm run restore                     # lists backups
 npm run restore -- backup-2026-10-21_01-32-24 --yes
 ```
 
-Restore copies the current state to `backups/pre-restore-<time>` first, then replaces database, vault, attachments and imports. Copy backups to another drive or encrypted storage regularly; a backup on the same disk does not protect against disk failure.
+Check a backup without changing anything (works on the D: copy and while the app runs), restore from any folder, or from an encrypted file (see the README, "Backups"):
+
+```powershell
+npm run restore -- 'D:\SecondBrainOS-backups\backup-2026-10-21_20-11-54' --verify
+npm run restore -- 'D:\SecondBrainOS-backups\backup-2026-10-21_20-11-54' --yes     # app stopped
+npm run backup -- --encrypt --copy-to '<synced or external folder>'                 # needs SBOS_BACKUP_PASSPHRASE
+```
+
+Restore copies the current state to `backups/pre-restore-<time>` first, then replaces database, vault, attachments and imports. A damaged backup is refused before anything is touched. Copy backups to another drive or encrypted storage regularly; a backup on the same disk does not protect against disk failure.
 
 ## 5. iPhone via Tailscale
 
@@ -77,6 +85,7 @@ Tailscale is installed on this PC and the iPhone is already in your tailnet. Rem
 1. Make sure the Tailscale app on the iPhone is connected (it showed offline at check time).
 2. Finish the hardening in docs/SECURITY.md (HTTPS via `tailscale serve`, secure cookies, allowed origin).
 3. Open the `https://<machine>.<tailnet>.ts.net` address in Safari, sign in, and use Share, Add to Home Screen.
+4. Optional: share-sheet capture with an iOS Shortcut (README, "Capture from the iPhone share sheet"). Needs `SBOS_CAPTURE_TOKEN` in `.env.local`.
 
 The PC must be on, awake, and Ollama running for AI features.
 

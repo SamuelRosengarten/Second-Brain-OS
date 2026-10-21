@@ -37,7 +37,7 @@ export function assertSameOrigin(req: Request): void {
 }
 
 type Ctx<B> = { req: Request; body: B; params: Record<string, string>; url: URL };
-type Opts<S extends z.ZodType | undefined> = { public?: boolean; body?: S };
+type Opts<S extends z.ZodType | undefined> = { public?: boolean; guard?: (req: Request) => void; body?: S };
 
 export function route<S extends z.ZodType | undefined = undefined>(
   opts: Opts<S>,
@@ -50,6 +50,7 @@ export function route<S extends z.ZodType | undefined = undefined>(
         if (!isPasswordSet()) throw new ApiError(503, "No password configured. Run `npm run set-password`.", "setup_required");
         if (!isAuthenticated(req.headers.get("cookie"))) throw new ApiError(401, "Not signed in", "unauthenticated");
       }
+      opts.guard?.(req); // custom auth for public routes; runs before the body is read
       let body: unknown = undefined;
       if (opts.body) {
         const text = await req.text();

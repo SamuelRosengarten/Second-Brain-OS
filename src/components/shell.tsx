@@ -99,12 +99,12 @@ export function Shell({ children }: { children: ReactNode }) {
                 <PenLine size={15} aria-hidden strokeWidth={1.75} className="text-accent" />
                 {!collapsed && <span className="flex-1">New capture</span>}
               </Link>
-              <button type="button" onClick={openPalette} title={`Search (${modKey}+K)`} aria-label="Open command palette" className={cx("flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-[13px] text-muted hover:bg-hover hover:text-fg", collapsed && "justify-center px-0")}>
+              <button type="button" onClick={openPalette} title={`Search (${modKey}+K)`} aria-label={collapsed ? "Search" : undefined} className={cx("flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-[13px] text-muted hover:bg-hover hover:text-fg", collapsed && "justify-center px-0")}>
                 <Search size={15} aria-hidden strokeWidth={1.75} />
                 {!collapsed && (
                   <>
                     <span className="flex-1 text-left">Search</span>
-                    <span className="flex gap-1"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>
+                    <span aria-hidden className="flex gap-1"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>
                   </>
                 )}
               </button>

@@ -51,14 +51,14 @@ export function QuickCapture({ onSaved }: { onSaved?: () => void }) {
         className="block w-full resize-none rounded-t-lg border-0 bg-transparent px-3.5 pt-3 pb-1 text-fg outline-none placeholder:text-faint"
       />
       <div className="flex flex-wrap items-center gap-3 px-3 pb-2.5 text-xs text-faint">
-        <label className="flex items-center gap-1.5">
-          <input type="checkbox" checked={process} onChange={(e) => setProcess(e.target.checked)} className="size-3.5 accent-[var(--accent)]" />
+        <label className="flex min-h-6 items-center gap-1.5">
+          <input type="checkbox" checked={process} onChange={(e) => setProcess(e.target.checked)} className="size-6 accent-[var(--accent)] sm:size-4" />
           Process with local AI
         </label>
         {last && !last.duplicate && (
-          <Link href={`/inbox/${last.capture.id}`} className="text-accent hover:underline">Open last capture</Link>
+          <Link href={`/inbox/${last.capture.id}`} className="inline-flex min-h-6 items-center text-accent hover:underline">Open last capture</Link>
         )}
-        <Link href="/capture" className="hover:text-fg">Attach files or more options</Link>
+        <Link href="/capture" className="inline-flex min-h-6 items-center hover:text-fg">Attach files or more options</Link>
         <span className="ml-auto hidden items-center gap-1 sm:flex"><Kbd>Ctrl</Kbd><Kbd>↵</Kbd></span>
         <Button size="sm" variant="primary" loading={busy} disabled={!text.trim()} onClick={() => void save()}>
           <ArrowUp size={14} aria-hidden />

@@ -123,7 +123,7 @@ function Chat() {
           {convs.data?.conversations.map((c) => (
             <li key={c.id} className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm ${c.id === convId ? "bg-surface2" : "hover:bg-surface"}`}>
               <button onClick={() => void open(c.id)} className="min-w-0 flex-1 truncate text-left">{c.title}</button>
-              <button aria-label={`Delete conversation ${c.title}`} onClick={() => setDelId(c.id)} className="text-faint hover:text-danger"><X size={14} aria-hidden /></button>
+              <button aria-label={`Delete conversation ${c.title}`} onClick={() => setDelId(c.id)} className="grid size-6 shrink-0 place-items-center rounded text-faint hover:text-danger"><X size={14} aria-hidden /></button>
             </li>
           ))}
           {convs.data?.conversations.length === 0 && <li className="px-2 text-xs text-muted">No conversations yet.</li>}

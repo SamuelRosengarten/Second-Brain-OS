@@ -17,6 +17,7 @@ export type Config = {
   secureCookies: boolean;
   allowedOrigins: string[];
   maxUploadBytes: number;
+  captureToken: string;
 };
 
 export function getConfig(): Config {
@@ -38,6 +39,7 @@ export function getConfig(): Config {
     secureCookies: env.SBOS_SECURE_COOKIES === "1",
     allowedOrigins: (env.SBOS_ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
     maxUploadBytes: Math.max(1, Number(env.SBOS_MAX_UPLOAD_MB || 25)) * 1024 * 1024,
+    captureToken: env.SBOS_CAPTURE_TOKEN ?? "",
   };
 }
 
