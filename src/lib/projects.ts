@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getDb } from "./db.ts";
 import { ApiError } from "./api.ts";
+import { addDays } from "./dates.ts";
 import { newId, nowIso, todayLocal } from "./util.ts";
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
@@ -128,11 +129,15 @@ export function createTask(input: z.input<typeof TaskInput>): Task {
 
 export const getTask = (id: string): Task | null => (getDb().prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task | undefined) ?? null;
 
-export interface TaskFilter { status?: string; priority?: string; project_id?: string; due?: "overdue" | "today" | "soon"; limit?: number }
+export interface TaskFilter {
+  status?: string; priority?: string; project_id?: string; due?: "overdue" | "today" | "soon"; limit?: number;
+  /** The caller's calendar date (YYYY-MM-DD). Defaults to the server clock; a phone in another timezone passes its own. */
+  today?: string;
+}
 export function listTasks(f: TaskFilter = {}): Task[] {
   const where: string[] = [];
   const args: unknown[] = [];
-  const today = todayLocal();
+  const today = f.today ?? todayLocal();
   if (f.status === "open") where.push("status <> 'done'");
   else if (f.status) { where.push("status = ?"); args.push(f.status); }
   if (f.priority) { where.push("priority = ?"); args.push(f.priority); }
@@ -140,7 +145,7 @@ export function listTasks(f: TaskFilter = {}): Task[] {
   if (f.due === "overdue") { where.push("status <> 'done' AND due_date IS NOT NULL AND due_date < ?"); args.push(today); }
   if (f.due === "today") { where.push("status <> 'done' AND due_date = ?"); args.push(today); }
   if (f.due === "soon") {
-    const end = todayLocal(new Date(Date.now() + 7 * 86400_000));
+    const end = addDays(today, 7);
     where.push("status <> 'done' AND due_date IS NOT NULL AND due_date >= ? AND due_date <= ?");
     args.push(today, end);
   }

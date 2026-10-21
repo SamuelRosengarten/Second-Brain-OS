@@ -19,12 +19,12 @@ export interface Briefing {
 }
 
 /** Everything here is computed from local database rows; nothing is generated or inferred by a model. */
-export function buildBriefing(): Briefing {
+export function buildBriefing(todayOverride?: string): Briefing {
   const db = getDb();
-  const today = todayLocal();
-  const overdue = listTasks({ due: "overdue" });
-  const dueToday = listTasks({ due: "today" });
-  const dueSoon = listTasks({ due: "soon" }).filter((t) => t.due_date !== today);
+  const today = todayOverride ?? todayLocal();
+  const overdue = listTasks({ due: "overdue", today });
+  const dueToday = listTasks({ due: "today", today });
+  const dueSoon = listTasks({ due: "soon", today }).filter((t) => t.due_date !== today);
   const counts = captureCounts();
   const open = (db.prepare("SELECT COUNT(*) AS c FROM tasks WHERE status <> 'done'").get() as { c: number }).c;
   const activeProjects = db

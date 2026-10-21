@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ymd } from "@/lib/dates";
 
 export class ApiFailure extends Error {
   status: number;
@@ -64,3 +65,6 @@ export const fmtDate = (iso: string | null | undefined): string => {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: iso.length > 10 ? "short" : undefined });
 };
+
+/** Today on THIS device's calendar. Sent to the API so the phone and the PC agree on what is "today". */
+export const localToday = (): string => ymd();
