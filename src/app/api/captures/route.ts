@@ -22,6 +22,8 @@ const JsonBody = z.object({
   content: z.string().max(200_000).optional(),
   url: z.string().max(2000).optional(),
   process: z.boolean().optional(),
+  project_id: z.string().nullable().optional(),
+  due: z.string().nullable().optional(),
 });
 
 export const POST = route({}, async ({ req }) => {
@@ -30,13 +32,13 @@ export const POST = route({}, async ({ req }) => {
   if (type.startsWith("multipart/form-data")) {
     const { fields, files } = await readForm(req);
     const kind = CAPTURE_KINDS.find((k) => k === fields.kind);
-    input = { kind, content: fields.content, url: fields.url, files, autoProcess: fields.process === "1" };
+    input = { kind, content: fields.content, url: fields.url, files, autoProcess: fields.process === "1", hintProjectId: fields.project_id || null, hintDue: fields.due || null };
   } else if (type.startsWith("application/json")) {
     const raw = await req.json().catch(() => {
       throw new ApiError(400, "Invalid JSON", "bad_json");
     });
     const b = JsonBody.parse(raw);
-    input = { kind: b.kind, content: b.content, url: b.url, autoProcess: b.process };
+    input = { kind: b.kind, content: b.content, url: b.url, autoProcess: b.process, hintProjectId: b.project_id ?? null, hintDue: b.due ?? null };
   } else throw new ApiError(415, "Unsupported content type", "unsupported");
   const r = await createCapture(input);
   return json(r, r.duplicate ? 200 : 201);

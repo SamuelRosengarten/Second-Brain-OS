@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, useApi } from "@/components/client";
 import { ShareSetupCard } from "@/components/share-setup";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { Badge, Button, Card, CardTitle, ErrorBox, Field, Loading, PageHeader, Select, Textarea, useToast } from "@/components/ui";
 
 interface Settings { chat_model: string; system_prompt: string; default_system_prompt: string }
@@ -80,7 +81,8 @@ export default function SettingsPage() {
   const installed = status.data?.ollama.models.map((m) => m.name) ?? [];
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title="Settings" />
+      <PageHeader title="Settings & automations" />
+      <SettingsTabs />
       <Card className="space-y-3">
         <CardTitle action={<Button size="sm" variant="ghost" onClick={() => void status.reload()}>Recheck</Button>}>System status</CardTitle>
         {status.loading && !status.data && <Loading />}

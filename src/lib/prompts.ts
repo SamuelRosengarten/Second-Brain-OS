@@ -9,6 +9,8 @@ export const ProposalSchema = z.object({
   tags: z.array(z.string().max(40)).max(12),
   related_projects: z.array(z.string().max(120)).max(5),
   next_action: z.string().max(300),
+  /** Follow-up tasks the capture implies (0-3). Offered as checkboxes in the review; none is created without a click. */
+  tasks: z.array(z.object({ title: z.string().min(1).max(200), due_date: z.string().max(10).optional() })).max(4).default([]),
   open_questions: z.array(z.string().max(300)).max(6),
   confidence: z.enum(["low", "medium", "high"]),
   uncertainty: z.string().max(400),
@@ -29,6 +31,7 @@ Rules:
 - "tags": 2-6 short lowercase tags, hyphenated, no '#'.
 - "related_projects": ONLY names copied exactly from the provided project list that clearly relate. Otherwise [].
 - "next_action": one concrete, small next step phrased as an imperative. Empty string if none is implied.
+- "tasks": 0 to 3 concrete follow-up tasks the capture clearly implies, each with a short imperative "title" and a "due_date" (YYYY-MM-DD) ONLY if the capture states a date. [] if nothing is implied. Do not repeat "next_action".
 - "open_questions": genuine unanswered questions raised by the capture. [] if none.
 - "confidence": "high" only if the capture is clear and self-contained; "low" if it is vague or very short.
 - "note_markdown": a clean Markdown note body: start with a "## Summary" section, keep the user's original meaning, preserve any links, and add a "## Open questions" or "## Next action" section only if non-empty. Do not repeat the title as an H1.

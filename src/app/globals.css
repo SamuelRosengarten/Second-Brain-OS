@@ -1,28 +1,36 @@
 @import "tailwindcss";
 
 /*
-  Design tokens. Dark is the default; light follows the OS unless the user chooses in Settings.
-  Accent (violet) is reserved for: active navigation, primary actions, focus, and AI-generated content.
+  Design tokens (the "Second Brain OS redesign"). Dark is the default; light follows the OS unless the user chooses in Settings.
+  Primary actions are near-white (dark in the light theme). Violet is reserved for AI: suggestions, proposals, citations, focus.
+  Project colors (--pc0..7) are assigned by project order and used for the little squares, bars and chips everywhere.
 */
 :root {
   color-scheme: dark;
-  --bg: #0b0d10;
-  --sidebar: #0e1116;
-  --surface: #13171d;
-  --elevated: #191e26;
-  --hover: #202630;
-  --text: #f0f2f5;
-  --muted: #a0a8b5; /* secondary text */
-  --faint: #8892a3; /* metadata, placeholders (>= 4.5:1 on every dark surface, incl. hover) */
-  --border: #282e38;
-  --accent: #b39dfb;
-  --accent-hover: #c2b1fc;
-  --accent-contrast: #0b0d10;
-  --ok: #4cc9a0;
-  --warn: #e9b96e;
-  --danger: #f58a8a;
-  --info: #79a9ff;
-  --pl: 64%; /* lightness of per-project colors (see projectColor) */
+  --bg: #0a0c10;
+  --sidebar: #0d1015;
+  --surface: #11151b; /* panels */
+  --elevated: #171c24; /* raised: chips, selected segments */
+  --hover: #1d232d;
+  --text: #eef0f4;
+  --muted: #a6afbd; /* secondary text */
+  --faint: #8b95a6; /* metadata, placeholders */
+  --border: #252c37;
+  --border-strong: #3a4352;
+  --accent: #b9a6ff; /* AI */
+  --accent-hover: #d6ccff;
+  --accent-contrast: #15102a;
+  --ai-bg: rgba(185, 166, 255, 0.12);
+  --ai-line: rgba(185, 166, 255, 0.5);
+  --ai-soft: rgba(185, 166, 255, 0.05);
+  --primary: #eef0f4;
+  --primary-hover: #ffffff;
+  --primary-contrast: #0a0c10;
+  --ok: #5dd3a9;
+  --warn: #f2c277;
+  --danger: #ff9090;
+  --info: #86b4ff;
+  --pc0: #86b4ff; --pc1: #5dd3a9; --pc2: #ff9fc6; --pc3: #7fd6e8; --pc4: #d9a77a; --pc5: #c4ce7a; --pc6: #ffb08a; --pc7: #cfd5e3;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -30,20 +38,27 @@
     --bg: #f7f8fa;
     --sidebar: #f1f3f6;
     --surface: #ffffff;
-    --elevated: #ffffff;
-    --hover: #e9ecf1;
+    --elevated: #eef0f4;
+    --hover: #e6e9ee;
     --text: #14171c;
     --muted: #4a5361;
     --faint: #5f6978;
     --border: #dce0e6;
+    --border-strong: #c4cad3;
     --accent: #5b3bc4;
     --accent-hover: #4a2fb0;
     --accent-contrast: #ffffff;
+    --ai-bg: rgba(91, 59, 196, 0.1);
+    --ai-line: rgba(91, 59, 196, 0.45);
+    --ai-soft: rgba(91, 59, 196, 0.05);
+    --primary: #14171c;
+    --primary-hover: #000000;
+    --primary-contrast: #ffffff;
     --ok: #0d6444;
     --warn: #7a5200;
     --danger: #ab2530;
     --info: #2556bb;
-  --pl: 40%;
+    --pc0: #1f6fd6; --pc1: #0f8a5e; --pc2: #d03a78; --pc3: #0b7f94; --pc4: #9a5f2b; --pc5: #6b7a1a; --pc6: #c4501b; --pc7: #5b6475;
   }
 }
 :root[data-theme="light"] {
@@ -51,20 +66,27 @@
   --bg: #f7f8fa;
   --sidebar: #f1f3f6;
   --surface: #ffffff;
-  --elevated: #ffffff;
-  --hover: #e9ecf1;
+  --elevated: #eef0f4;
+  --hover: #e6e9ee;
   --text: #14171c;
   --muted: #4a5361;
   --faint: #5f6978;
   --border: #dce0e6;
+  --border-strong: #c4cad3;
   --accent: #5b3bc4;
   --accent-hover: #4a2fb0;
   --accent-contrast: #ffffff;
+  --ai-bg: rgba(91, 59, 196, 0.1);
+  --ai-line: rgba(91, 59, 196, 0.45);
+  --ai-soft: rgba(91, 59, 196, 0.05);
+  --primary: #14171c;
+  --primary-hover: #000000;
+  --primary-contrast: #ffffff;
   --ok: #0d6444;
   --warn: #7a5200;
   --danger: #ab2530;
   --info: #2556bb;
-  --pl: 40%;
+  --pc0: #1f6fd6; --pc1: #0f8a5e; --pc2: #d03a78; --pc3: #0b7f94; --pc4: #9a5f2b; --pc5: #6b7a1a; --pc6: #c4501b; --pc7: #5b6475;
 }
 
 @theme inline {
@@ -74,18 +96,25 @@
   --color-surface2: var(--elevated);
   --color-hover: var(--hover);
   --color-line: var(--border);
+  --color-line2: var(--border-strong);
   --color-fg: var(--text);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-contrast);
+  --color-ai-bg: var(--ai-bg);
+  --color-ai-line: var(--ai-line);
+  --color-ai-soft: var(--ai-soft);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-contrast);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-info: var(--info);
   --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
-  --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Consolas, monospace;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", ui-monospace, Consolas, monospace;
 }
 
 /* Root stays at the browser default so rem-based sizes (and touch targets) are true to design; body text is 14px. */
@@ -160,13 +189,11 @@ dialog[open] {
   justify-content: center;
   min-width: 1.25rem;
   height: 1.25rem;
-  padding: 0 0.3rem;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
+  padding: 0 0.35rem;
   border-radius: 5px;
-  background: var(--elevated);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
-  font: 500 11px/1 var(--font-sans);
+  font: 500 11px/1 var(--font-mono);
 }
 
 /* loading skeletons */
@@ -313,50 +340,77 @@ textarea {
 }
 
 /*
-  Workflow page palette. Dark values are the design's own colors; light values are the same roles, darkened to keep 4.5:1 text contrast.
-  Project colors (--wf-p0..7) are assigned by project order and used for dots, borders and tinted chips.
+  Plan page (timeline and graph) variables: aliases of the shared design tokens, so both themes and the redesign palette apply.
 */
 :root {
-  --wf-panel: #0d0e12; --wf-line: #1b1d23; --wf-line2: #1d1f26; --wf-grid: #17191f; --wf-dots: #1f212a;
-  --wf-text: #e8e9ef; --wf-strong: #eceef5; --wf-muted: #8e92a0; --wf-soft: #c3c6d0;
-  --wf-acc: #b4a8ff; --wf-sug: #9d8cf0; --wf-bad: #ff6b5e; --wf-dep: #6f7488; --wf-link: #555a6e; --wf-edge: #2d3040;
-  --wf-btn: #15161d; --wf-btnline: #262833; --wf-seg: #23243a; --wf-segline: #34365a; --wf-primary: #6d5fc4; --wf-sugline: #2c2850;
-  --wf-today-line: #4b4390; --wf-today-bg: rgba(124, 108, 217, 0.07); --wf-weekend: rgba(255, 255, 255, 0.018);
-  --wf-load1: #1d1f29; --wf-load2: #2a2c42; --wf-load3: #4a3f8a;
-  --wf-ready: #7ee0a6; --wf-ready-bg: rgba(126, 224, 166, 0.14);
-  --wf-block: #b4b8c6; --wf-block-bg: rgba(255, 255, 255, 0.08);
-  --wf-late: #ff9488; --wf-late-bg: rgba(255, 107, 94, 0.16);
-  --wf-done: #8e92a0; --wf-done-bg: rgba(255, 255, 255, 0.06);
-  --wf-p0: #6cb4ff; --wf-p1: #9ccf6a; --wf-p2: #f4b455; --wf-p3: #b4a4ff; --wf-p4: #ff8fb1; --wf-p5: #5ed6c8; --wf-p6: #ff9f7a; --wf-p7: #c8c1a0;
-  --wf-note: #868a98; --wf-tag: #a9adbb; --wf-cap: #9aa0b4; --wf-crit: #ffffff;
+  --wf-panel: var(--surface);
+  --wf-line: var(--border);
+  --wf-line2: var(--border);
+  --wf-grid: color-mix(in srgb, var(--border) 70%, transparent);
+  --wf-dots: color-mix(in srgb, var(--border) 70%, transparent);
+  --wf-text: var(--text);
+  --wf-strong: var(--text);
+  --wf-muted: var(--muted);
+  --wf-soft: var(--muted);
+  --wf-acc: var(--accent);
+  --wf-sug: var(--accent);
+  --wf-bad: var(--danger);
+  --wf-dep: var(--faint);
+  --wf-link: var(--border-strong);
+  --wf-edge: var(--border);
+  --wf-btn: var(--elevated);
+  --wf-btnline: var(--border);
+  --wf-seg: var(--hover);
+  --wf-segline: var(--border-strong);
+  --wf-primary: var(--accent);
+  --wf-sugline: var(--ai-line);
+  --wf-today-line: color-mix(in srgb, var(--warn) 55%, transparent);
+  --wf-today-bg: color-mix(in srgb, var(--warn) 6%, transparent);
+  --wf-weekend: color-mix(in srgb, var(--text) 2.5%, transparent);
+  --wf-load1: var(--elevated);
+  --wf-load2: var(--hover);
+  --wf-load3: color-mix(in srgb, var(--accent) 35%, var(--surface));
+  --wf-ready: var(--ok);
+  --wf-ready-bg: color-mix(in srgb, var(--ok) 14%, transparent);
+  --wf-block: var(--muted);
+  --wf-block-bg: color-mix(in srgb, var(--text) 8%, transparent);
+  --wf-late: var(--danger);
+  --wf-late-bg: color-mix(in srgb, var(--danger) 14%, transparent);
+  --wf-done: var(--faint);
+  --wf-done-bg: color-mix(in srgb, var(--text) 6%, transparent);
+  --wf-note: var(--faint);
+  --wf-tag: var(--muted);
+  --wf-cap: var(--faint);
+  --wf-crit: var(--text);
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --wf-panel: #ffffff; --wf-line: #dce0e6; --wf-line2: #e6e9ee; --wf-grid: #e6e9ee; --wf-dots: #dfe3e9;
-    --wf-text: #14171c; --wf-strong: #0d1016; --wf-muted: #4a5361; --wf-soft: #2f3744;
-    --wf-acc: #5b3bc4; --wf-sug: #6a4fd0; --wf-bad: #ab2530; --wf-dep: #6b7385; --wf-link: #8a91a3; --wf-edge: #cdd2db;
-    --wf-btn: #f1f3f6; --wf-btnline: #cfd4dc; --wf-seg: #e9e6fb; --wf-segline: #c9c1f3; --wf-primary: #5b3bc4; --wf-sugline: #cfc6f5;
-    --wf-today-line: #b3a8ec; --wf-today-bg: rgba(91, 59, 196, 0.06); --wf-weekend: rgba(0, 0, 0, 0.025);
-    --wf-load1: #eceef3; --wf-load2: #dcdcf3; --wf-load3: #c5baf2;
-    --wf-ready: #0d6444; --wf-ready-bg: rgba(13, 100, 68, 0.12);
-    --wf-block: #4a5361; --wf-block-bg: rgba(0, 0, 0, 0.06);
-    --wf-late: #ab2530; --wf-late-bg: rgba(171, 37, 48, 0.12);
-    --wf-done: #4a5361; --wf-done-bg: rgba(0, 0, 0, 0.05);
-    --wf-p0: #1f6fd6; --wf-p1: #4f8a1c; --wf-p2: #b36b00; --wf-p3: #6a4fd0; --wf-p4: #d03a78; --wf-p5: #0f8f82; --wf-p6: #d0562a; --wf-p7: #7b6f3a;
-    --wf-note: #5f6978; --wf-tag: #4a5361; --wf-cap: #5f6978; --wf-crit: #14171c;
-  }
+
+/* [[wiki links]] inside notes */
+.md .wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--ai-line);
 }
-:root[data-theme="light"] {
-  --wf-panel: #ffffff; --wf-line: #dce0e6; --wf-line2: #e6e9ee; --wf-grid: #e6e9ee; --wf-dots: #dfe3e9;
-  --wf-text: #14171c; --wf-strong: #0d1016; --wf-muted: #4a5361; --wf-soft: #2f3744;
-  --wf-acc: #5b3bc4; --wf-sug: #6a4fd0; --wf-bad: #ab2530; --wf-dep: #6b7385; --wf-link: #8a91a3; --wf-edge: #cdd2db;
-  --wf-btn: #f1f3f6; --wf-btnline: #cfd4dc; --wf-seg: #e9e6fb; --wf-segline: #c9c1f3; --wf-primary: #5b3bc4; --wf-sugline: #cfc6f5;
-  --wf-today-line: #b3a8ec; --wf-today-bg: rgba(91, 59, 196, 0.06); --wf-weekend: rgba(0, 0, 0, 0.025);
-  --wf-load1: #eceef3; --wf-load2: #dcdcf3; --wf-load3: #c5baf2;
-  --wf-ready: #0d6444; --wf-ready-bg: rgba(13, 100, 68, 0.12);
-  --wf-block: #4a5361; --wf-block-bg: rgba(0, 0, 0, 0.06);
-  --wf-late: #ab2530; --wf-late-bg: rgba(171, 37, 48, 0.12);
-  --wf-done: #4a5361; --wf-done-bg: rgba(0, 0, 0, 0.05);
-  --wf-p0: #1f6fd6; --wf-p1: #4f8a1c; --wf-p2: #b36b00; --wf-p3: #6a4fd0; --wf-p4: #d03a78; --wf-p5: #0f8f82; --wf-p6: #d0562a; --wf-p7: #7b6f3a;
-  --wf-note: #5f6978; --wf-tag: #4a5361; --wf-cap: #5f6978; --wf-crit: #14171c;
+.md .wikilink:hover {
+  border-bottom-style: solid;
+}
+.md .wikilink-missing {
+  color: var(--muted);
+  border-bottom: 1px dotted var(--border-strong);
+}
+
+/* numbered citation chips in answers */
+.md a.cite {
+  display: inline-block;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background: var(--ai-bg);
+  color: var(--accent);
+  font: 500 11.5px/1.5 var(--font-mono);
+  text-decoration: none;
+  vertical-align: baseline;
+}
+.md a.cite:hover {
+  background: var(--ai-line);
+  color: var(--text);
 }

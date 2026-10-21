@@ -47,28 +47,30 @@ for (const theme of ["dark", "light"] as const) {
     await scan(page, `/login (${theme})`, found);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByLabel("Quick capture").or(page.getByRole("navigation", { name: "Mobile" })).first()).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^(Good |Working late)/ })).toBeVisible();
 
     const ids = await seed(page);
     const paths = ["/", "/capture", "/capture?title=Shared&text=https://example.com/x", "/inbox", `/inbox/${ids.capture}`, "/knowledge", `/knowledge/${ids.note}`,
-      "/projects", `/projects/${ids.project}`, "/workflow", "/tasks", "/ai", "/search?q=sample", "/settings", "/automations", "/more"];
+      "/inbox/review", "/projects", `/projects/${ids.project}`, "/plan", "/tasks", "/ai", "/knowledge?q=sample", "/settings", "/automations"];
     for (const p of paths) {
       await page.goto(p);
       await scan(page, `${p} (${theme})`, found);
     }
 
-    // pipeline: the second view, the task dialog opened from a marker, the AI suggestion dialog and the trash panel
-    await page.goto("/workflow");
-    await page.getByRole("button", { name: "Graph" }).click();
-    await page.waitForLoadState("networkidle");
-    await scan(page, `/workflow graph (${theme})`, found);
-    await page.getByRole("button", { name: "Critical path" }).click();
-    await scan(page, `/workflow critical path (${theme})`, found);
+    // plan: the other two views, then the Claude package dialog (desktop) and the trash panel
+    for (const view of ["timeline", "graph"]) {
+      await page.goto(`/plan?view=${view}`);
+      await page.waitForLoadState("networkidle");
+      await scan(page, `/plan ${view} (${theme})`, found);
+    }
     await page.goto("/ai");
-    await page.getByRole("button", { name: "Suggest tasks" }).click();
-    await expect(page.getByRole("dialog", { name: "Suggest tasks" })).toBeVisible();
-    await scan(page, `suggest tasks dialog (${theme})`, found);
-    await page.keyboard.press("Escape");
+    const build = page.getByRole("button", { name: "Build a Claude package" });
+    if (await build.isVisible()) {
+      await build.click();
+      await expect(page.getByRole("dialog", { name: "Build a Claude package" })).toBeVisible();
+      await scan(page, `claude package dialog (${theme})`, found);
+      await page.keyboard.press("Escape");
+    }
     await page.goto("/tasks");
     await page.getByRole("button", { name: "Show trash" }).click();
     await scan(page, `tasks with trash (${theme})`, found);

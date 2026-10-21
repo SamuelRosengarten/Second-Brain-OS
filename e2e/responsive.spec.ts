@@ -3,14 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WIDTHS = [375, 390, 430, 768, 1024, 1440];
-const PAGES = ["/", "/inbox", "/capture", "/knowledge", "/projects", "/workflow", "/tasks", "/ai", "/automations", "/settings", "/more"];
+const PAGES = ["/", "/inbox", "/capture", "/knowledge", "/projects", "/plan", "/plan?view=timeline", "/plan?view=graph", "/tasks", "/ai", "/automations", "/settings"];
 const SHOTS = path.join("test-results", "shots");
 
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Password").fill("e2e-test-password-123");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByLabel("Quick capture")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Good |Working late)/ })).toBeVisible();
 }
 
 test("every page fits every common viewport width (no horizontal overflow) and screenshots are saved", async ({ page }) => {
@@ -48,11 +48,13 @@ test("phone: tap targets are comfortable, the capture action is reachable, and d
     );
     expect(small, `small tap targets on ${p}`).toEqual([]);
   }
-  // the big center Capture action sits inside the bottom nav, within thumb reach
+  // the capture entry on Today and the bottom tab bar both sit within thumb reach
+  await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Mobile" });
-  const box = await nav.getByRole("link", { name: "Capture" }).boundingBox();
+  const box = await nav.getByRole("link", { name: "Inbox" }).boundingBox();
   expect(box!.y + box!.height).toBeLessThanOrEqual(667);
   expect(box!.y).toBeGreaterThan(667 - 120);
+  await expect(page.getByRole("link", { name: /Capture a thought, task or link/ })).toBeVisible();
   // dialog fits within the viewport and scrolls internally
   await page.goto("/knowledge");
   await page.getByRole("button", { name: "New note" }).first().click();
@@ -77,8 +79,8 @@ test("keyboard: skip link, visible focus ring, and palette opens from the sideba
   });
   expect(outline.style).not.toBe("none");
   expect(outline.width).toBeGreaterThanOrEqual(2);
-  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page.getByRole("button", { name: /Search or jump to/ }).click();
   await expect(page.getByRole("combobox", { name: "Search commands and notes" })).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Search", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: /Search or jump to/ })).toBeFocused();
 });

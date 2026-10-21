@@ -30,3 +30,4 @@ Not done / not verified:
 3. Build the iOS Shortcut (Settings now shows the exact values to copy) and confirm a share from Safari reaches the Inbox.
 4. Optional: n8n or an internal scheduler for "process new captures" with an approval step; scheduled briefing.
 5. Optional: additional `LlmProvider` implementations (explicitly configured, cost disclosed); DOCX extraction library; OCR.
+- Redesign (migration 004: task estimates, capture project/due hints): Today, Capture, Inbox with phone review flow, Notes with connections, Plan (week, timeline, graph) and Ask follow the Claude design "Second Brain OS redesign", desktop and iPhone widths, dark and light. Checked in Chromium with screenshots and axe-core; not yet used on a real iPhone. The sidebar still lists Projects and All tasks under their own pages rather than inside Plan.

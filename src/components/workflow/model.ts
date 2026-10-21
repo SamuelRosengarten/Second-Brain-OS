@@ -39,7 +39,7 @@ export interface ModelInput {
 }
 
 export const LOW_CONFIDENCE = 70;
-export const projectColor = (i: number): string => `var(--wf-p${i % 8})`;
+export const projectColor = (i: number): string => `var(--pc${i % 8})`;
 
 export const BADGE: Record<WStatus, { label: string; fg: string; bg: string }> = {
   ready: { label: STATUS_LABEL.ready, fg: "var(--wf-ready)", bg: "var(--wf-ready-bg)" },
@@ -63,7 +63,7 @@ export const MONTHS = MON;
 
 export function buildModel(i: ModelInput): Model {
   const { data, today } = i;
-  const projects: WProject[] = data.projects.map((p, idx) => ({ id: p.id, name: p.name, color: projectColor(idx), open: p.open_tasks }));
+  const projects: WProject[] = data.projects.map((p) => ({ id: p.id, name: p.name, color: projectColor(p.color_index), open: p.open_tasks }));
   // Tasks with no project get a pseudo project so they appear in lanes, filters and the agenda like any other.
   const loose = data.tasks.filter((t) => !t.project_id && !(Object.prototype.hasOwnProperty.call(i.doneOv, t.id) ? i.doneOv[t.id] : t.status === "done")).length;
   if (data.tasks.some((t) => !t.project_id)) projects.push({ id: "", name: "No project", color: "var(--wf-note)", open: loose });
@@ -74,7 +74,7 @@ export function buildModel(i: ModelInput): Model {
   const tasks: WTask[] = data.tasks.map((t) => {
     const due = Object.prototype.hasOwnProperty.call(i.dueOv, t.id) ? i.dueOv[t.id] : t.due_date;
     const done = Object.prototype.hasOwnProperty.call(i.doneOv, t.id) ? i.doneOv[t.id] : t.status === "done";
-    return { id: t.id, project_id: t.project_id, title: t.title, description: t.description, priority: t.priority, due_date: due, completed_at: t.completed_at, status: done ? "done" : t.status === "done" ? "todo" : t.status };
+    return { id: t.id, project_id: t.project_id, title: t.title, description: t.description, priority: t.priority, due_date: due, completed_at: t.completed_at, estimate_min: t.estimate_min, status: done ? "done" : t.status === "done" ? "todo" : t.status };
   });
 
   const deps: Dep[] = data.deps;
@@ -121,4 +121,17 @@ export function focusSets(m: Model, focus: string | null): { chain: Set<string>;
   const lit = new Set(chain);
   for (const x of m.neighbours.get(focus) ?? []) lit.add(x);
   return { chain, lit };
+}
+
+/** Everything within `hops` links of `focus` (the "Focus: 2 hops" view of the graph). Anything farther dims. */
+export function hopSets(m: Model, focus: string | null, hops: number): { chain: Set<string>; lit: Set<string> } | null {
+  if (!focus || !m.entities.has(focus)) return null;
+  const lit = new Set<string>([focus]);
+  let frontier = [focus];
+  for (let i = 0; i < hops; i++) {
+    const next: string[] = [];
+    for (const id of frontier) for (const n of m.neighbours.get(id) ?? []) if (!lit.has(n)) { lit.add(n); next.push(n); }
+    frontier = next;
+  }
+  return { chain: new Set([focus]), lit };
 }

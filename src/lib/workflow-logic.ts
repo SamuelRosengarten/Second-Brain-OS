@@ -8,6 +8,8 @@ import { diffDays } from "./pipeline.ts";
 export interface WTask {
   id: string; project_id: string | null; title: string; description: string;
   status: "todo" | "doing" | "done"; priority: "low" | "medium" | "high"; due_date: string | null; completed_at: string | null;
+  /** Planned minutes; the Week plan adds these up per day. */
+  estimate_min?: number | null;
 }
 /** `a` must be finished before `b` can start. */
 export interface Dep { a: string; b: string }

@@ -39,3 +39,31 @@ describe("safe Markdown rendering", () => {
     expect(out).toContain("<pre><code>**not bold** &lt;b&gt;x&lt;/b&gt;</code></pre>");
   });
 });
+
+describe("wiki links", () => {
+  const withWiki = (s: string) => renderToStaticMarkup(createElement(Markdown, { source: s, wiki: (t: string) => (t === "Known note" ? "n1" : undefined) }));
+  it("links known titles to the note and marks unknown ones, without touching other syntax", () => {
+    const out = withWiki("See [[Known note]] and [[Missing one]], [site](https://example.com) and **bold**.");
+    expect(out).toContain('<a class="wikilink" href="/knowledge/n1">Known note</a>');
+    expect(out).toContain('<span class="wikilink-missing" title="No note with this title yet">Missing one</span>');
+    expect(out).toContain('<a href="https://example.com" target="_blank" rel="noopener noreferrer">site</a>');
+    expect(out).toContain("<strong>bold</strong>");
+  });
+  it("renders plain text when no resolver is given and never injects markup from a title", () => {
+    expect(html("a [[<img src=x onerror=alert(1)>]] b")).not.toContain("<img");
+  });
+});
+
+describe("numbered citations", () => {
+  const cited = (s: string) => renderToStaticMarkup(createElement(Markdown, { source: s, cite: (n: number) => n <= 2 }));
+  it("turns [n] into chips only for sources that exist, and never touches links", () => {
+    const out = cited("Status lives on Request [1]. See also [2] and [7]. A [link](https://example.com).");
+    expect(out).toContain('<a href="#src-1" class="cite" aria-label="Source 1">1</a>');
+    expect(out).toContain('<a href="#src-2" class="cite" aria-label="Source 2">2</a>');
+    expect(out).toContain("[7]"); // no source 7: stays plain text
+    expect(out).toContain('<a href="https://example.com" target="_blank" rel="noopener noreferrer">link</a>');
+  });
+  it("leaves [n] alone when no resolver is given", () => {
+    expect(html("See [1] here")).toContain("See [1] here");
+  });
+});

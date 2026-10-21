@@ -4,7 +4,7 @@ import { getChatModel } from "./chat.ts";
 import { getDb } from "./db.ts";
 import { addDays, isYmd, ymd } from "./dates.ts";
 import { getProvider, type ChatMessage } from "./ollama.ts";
-import { getTask, listProjects, type Project, type Task } from "./projects.ts";
+import { getTask, listProjects, type ProjectRow, type Task } from "./projects.ts";
 import { newId, nowIso } from "./util.ts";
 import { wouldCycle, type Dep } from "./workflow-logic.ts";
 
@@ -136,7 +136,7 @@ export interface WorkflowNote { id: string; title: string; updated_at: string }
 export interface WorkflowCapture { id: string; title: string }
 export interface WorkflowLink { a: string; b: string }
 export interface WorkflowData {
-  projects: (Project & { open_tasks: number })[];
+  projects: ProjectRow[];
   tasks: Task[];
   deps: Dep[];
   suggestions: DepSuggestion[];
@@ -189,7 +189,7 @@ export function workflowData(today: string = ymd()): WorkflowData {
   }
 
   return {
-    projects: projects.map((p) => ({ ...p, open_tasks: p.open_tasks })),
+    projects,
     tasks,
     deps: listDeps().filter((d) => taskIds.has(d.a) && taskIds.has(d.b)),
     suggestions: pendingSuggestions().filter((s) => taskIds.has(s.a) && taskIds.has(s.b)),

@@ -14,7 +14,11 @@ export interface GraphProps {
   focus: string | null;
   sets: { chain: Set<string>; lit: Set<string> } | null;
   selected: string | null;
-  show: { note: boolean; tag: boolean; capture: boolean; sugg: boolean };
+  show: { task: boolean; note: boolean; tag: boolean; capture: boolean; sugg: boolean };
+  /** Pull each project's tasks together in the layout. */
+  group?: boolean;
+  /** Canvas height in px on wide screens (phones size it from the number of tasks). */
+  height?: number;
   /** Phone layout: taller canvas, bigger touch targets, labels only where they matter. */
   compact: boolean;
   resetKey: number;
@@ -42,11 +46,11 @@ function savePositions(bucket: string, frac: Frac): void {
   }
 }
 
-export function GraphCanvas({ model: m, focus, sets, selected, show, compact, resetKey, onSelect, onHover }: GraphProps) {
+export function GraphCanvas({ model: m, focus, sets, selected, show, group, height, compact, resetKey, onSelect, onHover }: GraphProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const avail = useElementWidth(wrap);
   const W = Math.max(avail, 300);
-  const H = compact ? Math.max(620, Math.min(1200, 420 + m.tasks.length * 20)) : 800;
+  const H = compact ? Math.max(620, Math.min(1200, 420 + m.tasks.length * 20)) : (height ?? 800);
   const bucket = compact ? "phone" : "wide";
   const [frac, setFrac] = useState<Frac>({});
   const drag = useRef<{ id: string; moved: boolean } | null>(null);
@@ -61,7 +65,7 @@ export function GraphCanvas({ model: m, focus, sets, selected, show, compact, re
     const hiddenIds = new Set(m.projects.filter((p) => !m.visibleProjects.some((v) => v.id === p.id)).map((p) => p.id));
     for (const p of m.projects) if (p.id) out.push({ id: p.id, kind: "project", label: p.name, sub: "" });
     for (const t of m.tasks) {
-      if (hiddenIds.has(t.project_id ?? "")) continue;
+      if (hiddenIds.has(t.project_id ?? "") || !show.task) continue;
       const st = m.status.get(t.id)!;
       const extra = st === "blocked" || st === "overdue" || st === "conflict" ? ` · ${BADGE[st].label}` : st === "done" ? " · Done" : "";
       out.push({ id: t.id, kind: "task", label: t.title.length > 34 ? `${t.title.slice(0, 33)}…` : t.title, sub: `${t.due_date ? ` · ${shortDate(t.due_date)}` : " · no date"}${extra}` });
@@ -70,11 +74,25 @@ export function GraphCanvas({ model: m, focus, sets, selected, show, compact, re
       if ((e.kind === "note" && show.note) || (e.kind === "tag" && show.tag) || (e.kind === "capture" && show.capture)) out.push({ id: e.id, kind: e.kind, label: e.title, sub: "" });
     }
     return out;
-  }, [m, show.note, show.tag, show.capture]);
+  }, [m, show.task, show.note, show.tag, show.capture]);
   const ids = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
   const edges = useMemo(() => m.links.filter((l) => ids.has(l.a) && ids.has(l.b) && (l.kind !== "sugg" || show.sugg)), [m.links, ids, show.sugg]);
 
-  const base = useMemo(() => forceLayout(nodes, edges as GEdge[], W, H), [nodes, edges, W, H]);
+  // Grouping adds invisible pulls between tasks of one project, so they sit together; the drawn edges do not change.
+  const layoutEdges = useMemo(() => {
+    if (!group) return edges as GEdge[];
+    const extra: GEdge[] = [];
+    const last = new Map<string, string>();
+    for (const n of nodes) {
+      if (n.kind !== "task") continue;
+      const pid = m.graph.byId.get(n.id)?.project_id ?? "";
+      const prev = last.get(pid);
+      if (prev) extra.push({ a: prev, b: n.id });
+      last.set(pid, n.id);
+    }
+    return [...(edges as GEdge[]), ...extra];
+  }, [edges, group, nodes, m.graph]);
+  const base = useMemo(() => forceLayout(nodes, layoutEdges, W, H), [nodes, layoutEdges, W, H]);
   const pos = (id: string) => {
     const f = frac[id];
     if (f) return { x: Math.min(W - 24, Math.max(24, f.fx * W)), y: Math.min(H - 24, Math.max(24, f.fy * H)) };

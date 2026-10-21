@@ -15,6 +15,10 @@ export const GET = route({}, ({ url }) => {
       project_id: p.get("project") || undefined,
       due: due === "overdue" || due === "today" || due === "soon" ? due : undefined,
       today: isYmd(today) ? today : undefined,
+      dueFrom: isYmd(p.get("due_from")) ? p.get("due_from")! : undefined,
+      dueTo: isYmd(p.get("due_to")) ? p.get("due_to")! : undefined,
+      completedSince: /^\d{4}-\d{2}-\d{2}T/.test(p.get("completed_since") ?? "") ? p.get("completed_since")! : undefined,
+      limit: Number(p.get("limit")) > 0 ? Number(p.get("limit")) : undefined,
     }),
   };
 });

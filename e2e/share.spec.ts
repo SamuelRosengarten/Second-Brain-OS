@@ -11,11 +11,15 @@ test("web share target: the manifest declares it and /capture opens prefilled fr
 
   // a page shared from Chrome on Android: title + the link in `text`
   await page.goto("/capture?title=Great%20article&text=https%3A%2F%2Fexample.com%2Fa");
-  await expect(page.getByLabel("Web link (optional)")).toHaveValue("https://example.com/a");
-  await expect(page.getByLabel("Capture content")).toHaveValue("Great article");
+  await expect(page.getByLabel("What is on your mind?")).toHaveValue("Great article");
+  await expect(page.getByText("https://example.com/a")).toBeVisible();
 
   // shared text with its own link
   await page.goto("/capture?text=Remember%20this&url=https%3A%2F%2Fexample.com%2Fb");
-  await expect(page.getByLabel("Capture content")).toHaveValue("Remember this");
-  await expect(page.getByLabel("Web link (optional)")).toHaveValue("https://example.com/b");
+  await expect(page.getByLabel("What is on your mind?")).toHaveValue("Remember this");
+  await expect(page.getByText("https://example.com/b")).toBeVisible();
+
+  // a lone link opens as a link capture
+  await page.goto("/capture?url=https%3A%2F%2Fexample.com%2Fc");
+  await expect(page.getByLabel("Paste a link")).toHaveValue("https://example.com/c");
 });

@@ -20,6 +20,8 @@ export interface CaptureRow {
   status: "new" | "processing" | "proposed" | "accepted" | "dismissed" | "failed";
   archived: number; content_hash: string; proposal_json: string | null; model: string | null;
   error: string | null; note_id: string | null; created_at: string; updated_at: string;
+  /** Chosen on the capture screen before the AI ran: pre-selected when the capture is reviewed. */
+  hint_project_id: string | null; hint_due: string | null;
 }
 export interface Capture extends Omit<CaptureRow, "proposal_json" | "archived"> {
   archived: boolean;
@@ -63,7 +65,7 @@ export function listCaptures(f: CaptureFilter = {}): Capture[] {
 }
 
 export interface UploadedFile { name: string; data: Buffer }
-export interface CreateCaptureInput { kind?: CaptureKind; content?: string; url?: string; files?: UploadedFile[]; autoProcess?: boolean }
+export interface CreateCaptureInput { kind?: CaptureKind; content?: string; url?: string; files?: UploadedFile[]; autoProcess?: boolean; hintProjectId?: string | null; hintDue?: string | null }
 export interface CreateCaptureResult { capture: Capture; duplicate: boolean }
 
 /** Saves the capture (and any files) BEFORE any AI work. A model failure can never lose the original. */
@@ -75,6 +77,8 @@ export async function createCapture(input: CreateCaptureInput): Promise<CreateCa
   if (url && !/^https?:\/\//i.test(url)) throw new ApiError(400, "URL must start with http:// or https://", "validation");
   const files = input.files ?? [];
   if (!content && !url && !files.length) throw new ApiError(400, "Nothing to capture: add text, a link or a file.", "validation");
+  const hintProject = input.hintProjectId && listProjects().some((p) => p.id === input.hintProjectId) ? input.hintProjectId : null;
+  const hintDue = input.hintDue && /^\d{4}-\d{2}-\d{2}$/.test(input.hintDue) ? input.hintDue : null;
 
   // Validate every file up-front so a bad file does not leave a half-created capture.
   const prepared: { name: string; data: Buffer; mime: string; text: string; kind: string }[] = [];
@@ -109,8 +113,8 @@ export async function createCapture(input: CreateCaptureInput): Promise<CreateCa
   try {
     db.transaction(() => {
       db.prepare(
-        "INSERT INTO captures (id, kind, original_content, content, url, status, content_hash, created_at, updated_at) VALUES (?,?,?,?,?, 'new', ?,?,?)",
-      ).run(id, kind, content, content, url, hash, now, now);
+        "INSERT INTO captures (id, kind, original_content, content, url, status, content_hash, created_at, updated_at, hint_project_id, hint_due) VALUES (?,?,?,?,?, 'new', ?,?,?,?,?)",
+      ).run(id, kind, content, content, url, hash, now, now, hintProject, hintDue);
       for (const p of prepared) {
         const sub = now.slice(0, 7);
         const dir = path.join(cfg.attachmentsDir, sub);
@@ -213,6 +217,12 @@ export async function processCapture(id: string, model?: string): Promise<Captur
     const proposal = ProposalSchema.parse(raw);
     // Never trust the model to name projects that do not exist.
     proposal.related_projects = proposal.related_projects.filter((n) => projectNames.includes(n));
+    // Keep only usable tasks: real titles, real dates, no repeats of each other or of the next action.
+    const seen = new Set([proposal.next_action.trim().toLowerCase()]);
+    proposal.tasks = proposal.tasks
+      .map((t) => ({ title: t.title.replace(/\s+/g, " ").trim(), due_date: t.due_date && /^\d{4}-\d{2}-\d{2}$/.test(t.due_date) ? t.due_date : undefined }))
+      .filter((t) => t.title && !seen.has(t.title.toLowerCase()) && seen.add(t.title.toLowerCase()))
+      .slice(0, 3);
     db.prepare("UPDATE captures SET status='proposed', proposal_json=?, error=NULL, updated_at=? WHERE id=?").run(JSON.stringify(proposal), nowIso(), id);
     log("info", "capture.processed", { id, model: useModel });
   } catch (e) {
@@ -244,7 +254,7 @@ export const AcceptInput = z.object({
   category: z.string().max(60).default(""),
   tags: z.array(z.string()).max(20).default([]),
   project_ids: z.array(z.string()).max(10).default([]),
-  tasks: z.array(z.object({ title: z.string().trim().min(1).max(300), priority: z.enum(["low", "medium", "high"]).default("medium"), due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), project_id: z.string().nullable().optional() })).max(10).default([]),
+  tasks: z.array(z.object({ title: z.string().trim().min(1).max(300), priority: z.enum(["low", "medium", "high"]).default("medium"), due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), project_id: z.string().nullable().optional(), estimate_min: z.number().int().min(1).max(1440).nullable().optional() })).max(10).default([]),
 });
 
 export function acceptCapture(id: string, input: z.infer<typeof AcceptInput>): { note: Note; taskIds: string[] } {

@@ -6,21 +6,25 @@ test("phone layout: bottom navigation, no horizontal scroll, capture works", asy
   await page.getByRole("button", { name: "Sign in" }).click();
   const nav = page.getByRole("navigation", { name: "Mobile" });
   await expect(nav).toBeVisible();
-  for (const label of ["Home", "Capture", "Search", "Inbox", "More"]) await expect(nav.getByRole("link", { name: label })).toBeVisible();
+  for (const label of ["Today", "Inbox", "Notes", "Plan", "Ask"]) await expect(nav.getByRole("link", { name: label })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden();
 
-  for (const path of ["/", "/capture", "/inbox", "/knowledge", "/projects", "/workflow", "/tasks", "/ai", "/settings", "/more"]) {
+  for (const path of ["/", "/capture", "/inbox", "/knowledge", "/projects", "/plan", "/plan?view=timeline", "/plan?view=graph", "/tasks", "/ai", "/settings", "/automations"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `horizontal overflow on ${path}`).toBeLessThanOrEqual(0);
   }
 
-  await nav.getByRole("link", { name: "Capture" }).click();
-  await page.getByLabel("Capture content").fill("phone capture test");
-  await page.getByRole("checkbox").uncheck();
-  await page.getByRole("button", { name: "Save capture" }).click();
-  await expect(page.getByRole("link", { name: /Open in inbox/ })).toBeVisible();
+  await page.goto("/");
+  await page.getByRole("link", { name: /Capture a thought, task or link/ }).click();
+  await expect(page).toHaveURL(/\/capture$/);
+  await expect(nav).toBeHidden(); // the capture screen is full height, without the tab bar
+  await page.getByLabel("What is on your mind?").fill("phone capture test");
+  await page.getByText("Let my local AI tidy it up").click();
+  await expect(page.getByRole("switch")).not.toBeChecked();
+  await page.getByRole("button", { name: "Save to inbox" }).click();
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("phone: an overdue task keeps its title readable and the edit dialog keeps Save in view without raising the keyboard", async ({ page }) => {

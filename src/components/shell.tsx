@@ -1,220 +1,194 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Brain, FileText, FolderKanban, Home, Inbox, ListTodo, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Search, Settings, Sparkles, Waypoints, Workflow, type LucideIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { CalendarDays, ChevronLeft, FileText, Inbox, Plus, Search, SlidersHorizontal, Sparkles, Sun, type LucideIcon } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { ProjectSquare, ProjectsProvider, projectColorVar, useProjects } from "./blocks";
 import { useApi } from "./client";
 import { CommandPalette } from "./command-palette";
-import { cx, IconButton, Kbd, ToastProvider } from "./ui";
+import { cx, ToastProvider } from "./ui";
 
-interface NavItem { href: string; label: string; icon: LucideIcon }
-const PRIMARY: NavItem[] = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/inbox", label: "Inbox", icon: Inbox },
-  { href: "/knowledge", label: "Notes", icon: FileText },
-  { href: "/tasks", label: "Tasks", icon: ListTodo },
-  { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/workflow", label: "Workflow", icon: Waypoints },
-  { href: "/ai", label: "Ask AI", icon: Sparkles },
-  { href: "/automations", label: "Automations", icon: Workflow },
+interface NavItem { href: string; label: string; icon: LucideIcon; match: string[] }
+const NAV: NavItem[] = [
+  { href: "/", label: "Today", icon: Sun, match: ["/"] },
+  { href: "/inbox", label: "Inbox", icon: Inbox, match: ["/inbox"] },
+  { href: "/knowledge", label: "Notes", icon: FileText, match: ["/knowledge"] },
+  { href: "/plan", label: "Plan", icon: CalendarDays, match: ["/plan", "/workflow", "/tasks", "/pipeline"] },
+  { href: "/ai", label: "Ask", icon: Sparkles, match: ["/ai"] },
 ];
-const MOBILE_MORE = ["/more", "/knowledge", "/projects", "/tasks", "/ai", "/automations", "/settings"];
+/** Pages that draw their own phone header (and need no slim top bar). */
+const OWN_HEADER = ["/", "/inbox", "/knowledge", "/plan", "/workflow", "/ai", "/capture"];
+/** Full-screen phone flows have no tab bar. */
+const NO_TABS = ["/capture", "/inbox/review"];
 
-function isActive(path: string, href: string): boolean {
-  if (href === "/") return path === "/";
-  if (href === "/more") return MOBILE_MORE.some((r) => path === r || path.startsWith(r + "/"));
-  return path === href || path.startsWith(href + "/");
+function isActive(path: string, item: NavItem): boolean {
+  return item.match.some((m) => (m === "/" ? path === "/" : path === m || path.startsWith(m + "/")));
 }
 
 const PaletteCtx = createContext<() => void>(() => undefined);
 export const useOpenPalette = () => useContext(PaletteCtx);
 
-interface Status { ollama: { ok: boolean } }
+interface Status { ollama: { ok: boolean }; chatModel: { name: string } }
 
-export function Shell({ children }: { children: ReactNode }) {
+function BrandMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+      <circle cx="6" cy="7" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="12" cy="18" r="2.5" />
+      <path d="M7.4 9.3l3.4 6.4M16.8 8.2l-3.6 7.5M8.5 6.8h7" />
+    </svg>
+  );
+}
+
+function ShellInner({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const router = useRouter();
   const [palette, setPalette] = useState(false);
   const review = useApi<{ captures: unknown[] }>("/api/captures?status=proposed");
-  const recent = useApi<{ notes: { id: string; title: string }[] }>("/api/notes?limit=5");
-  const projects = useApi<{ projects: { id: string; name: string }[] }>("/api/projects?status=active");
   const status = useApi<Status>("/api/status");
+  const { projects } = useProjects();
   const reviewCount = review.data?.captures.length ?? 0;
-  const { reload: r1 } = review;
-  const { reload: r2 } = recent;
-  const { reload: r3 } = projects;
+  const { reload: reloadReview } = review;
+  const [modKey, setModKey] = useState("Ctrl");
 
-  useEffect(() => {
-    try {
-      setCollapsed(localStorage.getItem("sbos-sidebar") === "collapsed");
-    } catch { /* storage unavailable */ }
-  }, []);
-  // keep sidebar data fresh after navigation (cheap local queries)
-  useEffect(() => {
-    void r1();
-    void r2();
-    void r3();
-  }, [path, r1, r2, r3]);
-  // Ctrl/Cmd+K anywhere
+  useEffect(() => { void reloadReview(); }, [path, reloadReview]);
+  useEffect(() => { if (/Mac|iPhone|iPad/.test(navigator.platform)) setModKey("⌘"); }, []);
+  // Ctrl/Cmd+K opens the palette anywhere; a bare "n" (outside text fields) starts a new capture.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPalette((p) => !p);
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+      if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "n" && !document.querySelector("dialog[open]")) {
+        e.preventDefault();
+        router.push("/capture");
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, []);
-  const toggle = useCallback(() => {
-    setCollapsed((c) => {
-      try { localStorage.setItem("sbos-sidebar", c ? "expanded" : "collapsed"); } catch { /* ignore */ }
-      return !c;
-    });
-  }, []);
+  }, [router]);
   const openPalette = useCallback(() => setPalette(true), []);
-  const [modKey, setModKey] = useState("Ctrl");
-  useEffect(() => {
-    if (/Mac|iPhone|iPad/.test(navigator.platform)) setModKey("⌘");
-  }, []);
+
   const ollama = status.data?.ollama.ok;
+  const model = status.data?.chatModel.name;
+  const active = projects.filter((p) => p.status !== "archived").sort((a, b) => a.color_index - b.color_index);
+  const tabs = !NO_TABS.includes(path);
+  const ownHeader = OWN_HEADER.some((r) => (r === "/" ? path === "/" : path === r || path.startsWith(r + "/")));
+  const onProject = (id: string) => path === `/projects/${id}`;
 
   return (
     <PaletteCtx.Provider value={openPalette}>
-      <ToastProvider>
-        <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:rounded-md focus:bg-accent focus:px-3 focus:py-2 focus:text-accent-fg">Skip to content</a>
-        <div className="flex min-h-dvh">
-          {/* ---------- desktop sidebar ---------- */}
-          <aside className={cx("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-sidebar lg:flex", collapsed ? "w-14" : "w-60")}>
-            <div className={cx("flex h-12 items-center gap-2 px-3", collapsed && "justify-center px-0")}>
-              <Link href="/" aria-label="Second Brain OS home" className="grid size-7 shrink-0 place-items-center rounded-md bg-accent/15 text-accent">
-                <Brain size={16} aria-hidden strokeWidth={1.75} />
-              </Link>
-              {!collapsed && <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">Second Brain OS</span>}
-              {!collapsed && <IconButton icon={PanelLeftClose} label="Collapse sidebar" onClick={toggle} />}
-            </div>
-            {collapsed && <IconButton icon={PanelLeftOpen} label="Expand sidebar" onClick={toggle} className="mx-auto" />}
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-fg">Skip to content</a>
+      <div className="flex min-h-dvh">
+        {/* ---------- desktop sidebar ---------- */}
+        <aside aria-label="App" className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col gap-[18px] border-r border-line bg-sidebar px-3 py-4 lg:flex">
+          <Link href="/" aria-label="Second Brain, Today" className="flex items-center gap-2.5 px-1.5 py-0.5">
+            <span className="grid size-7 place-items-center rounded-lg bg-ai-bg text-accent"><BrandMark /></span>
+            <span className="text-sm font-semibold tracking-tight">Second Brain</span>
+          </Link>
 
-            <div className={cx("space-y-1.5 px-2 pt-1 pb-2", collapsed && "px-1.5")}>
-              <Link href="/capture" title="Capture an idea" className={cx("flex h-8 items-center gap-2 rounded-md border border-line bg-surface2 px-2.5 text-[13px] font-medium hover:bg-hover", collapsed && "justify-center px-0")}>
-                <PenLine size={15} aria-hidden strokeWidth={1.75} className="text-accent" />
-                {!collapsed && <span className="flex-1">New capture</span>}
-              </Link>
-              <button type="button" onClick={openPalette} title={`Search (${modKey}+K)`} aria-label={collapsed ? "Search" : undefined} className={cx("flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-[13px] text-muted hover:bg-hover hover:text-fg", collapsed && "justify-center px-0")}>
-                <Search size={15} aria-hidden strokeWidth={1.75} />
-                {!collapsed && (
-                  <>
-                    <span className="flex-1 text-left">Search</span>
-                    <span aria-hidden className="flex gap-1"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
-              <div className="space-y-0.5">
-                {PRIMARY.map((n) => {
-                  const on = isActive(path, n.href);
-                  return (
-                    <Link key={n.href} href={n.href} title={collapsed ? n.label : undefined} aria-current={on ? "page" : undefined} className={cx("relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px]", collapsed && "justify-center px-0", on ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover/60 hover:text-fg")}>
-                      {on && <span aria-hidden className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent" />}
-                      <n.icon size={15} aria-hidden strokeWidth={1.75} className={on ? "text-accent" : ""} />
-                      {!collapsed && <span className="flex-1">{n.label}</span>}
-                      {!collapsed && n.href === "/inbox" && reviewCount > 0 && <span className="tnum rounded bg-accent/15 px-1.5 text-xs font-medium text-accent" aria-label={`${reviewCount} awaiting review`}>{reviewCount}</span>}
-                    </Link>
-                  );
-                })}
-              </div>
-
-              {!collapsed && (projects.data?.projects.length ?? 0) > 0 && (
-                <div>
-                  <div className="px-2.5 pb-1 text-xs font-medium text-faint">Projects</div>
-                  <ul className="space-y-0.5">
-                    {projects.data!.projects.slice(0, 6).map((p) => (
-                      <li key={p.id}>
-                        <Link href={`/projects/${p.id}`} aria-current={path === `/projects/${p.id}` ? "page" : undefined} className={cx("flex h-7 items-center gap-2.5 rounded-md px-2.5 text-[13px] hover:bg-hover/60 hover:text-fg", path === `/projects/${p.id}` ? "bg-hover text-fg" : "text-muted")}>
-                          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-faint" />
-                          <span className="truncate">{p.name}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {!collapsed && (recent.data?.notes.length ?? 0) > 0 && (
-                <div>
-                  <div className="px-2.5 pb-1 text-xs font-medium text-faint">Recent notes</div>
-                  <ul className="space-y-0.5">
-                    {recent.data!.notes.map((n) => (
-                      <li key={n.id}>
-                        <Link href={`/knowledge/${n.id}`} aria-current={path === `/knowledge/${n.id}` ? "page" : undefined} className={cx("flex h-7 items-center gap-2.5 rounded-md px-2.5 text-[13px] hover:bg-hover/60 hover:text-fg", path === `/knowledge/${n.id}` ? "bg-hover text-fg" : "text-muted")}>
-                          <FileText size={13} aria-hidden strokeWidth={1.75} className="shrink-0 text-faint" />
-                          <span className="truncate">{n.title}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </nav>
-
-            <div className={cx("space-y-0.5 border-t border-line p-2", collapsed && "p-1.5")}>
-              <div className={cx("flex h-7 items-center gap-2.5 px-2.5 text-xs text-faint", collapsed && "justify-center px-0")} title={ollama === undefined ? "Checking Ollama" : ollama ? "Ollama is reachable" : "Ollama is not reachable: AI features are paused"}>
-                <span aria-hidden className={cx("size-2 shrink-0 rounded-full", ollama === undefined ? "bg-faint" : ollama ? "bg-ok" : "bg-danger")} />
-                {!collapsed && <span role="status">{ollama === undefined ? "Checking AI…" : ollama ? "Local AI online" : "Local AI offline"}</span>}
-              </div>
-              <Link href="/settings" title={collapsed ? "Settings" : undefined} aria-current={isActive(path, "/settings") ? "page" : undefined} className={cx("relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px]", collapsed && "justify-center px-0", isActive(path, "/settings") ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover/60 hover:text-fg")}>
-                {isActive(path, "/settings") && <span aria-hidden className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent" />}
-                <Settings size={15} aria-hidden strokeWidth={1.75} />
-                {!collapsed && "Settings"}
-              </Link>
-            </div>
-          </aside>
-
-          <div className="flex min-w-0 flex-1 flex-col">
-            {/* ---------- mobile top bar ---------- */}
-            <header className="safe-top sticky top-0 z-30 flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-2 border-b border-line bg-bg/95 px-3 backdrop-blur lg:hidden">
-              <Link href="/" aria-label="Second Brain OS home" className="grid size-7 place-items-center rounded-md bg-accent/15 text-accent">
-                <Brain size={16} aria-hidden strokeWidth={1.75} />
-              </Link>
-              <span className="flex-1 text-[13px] font-semibold tracking-tight">Second Brain OS</span>
-              <IconButton icon={Search} label="Search and commands" onClick={openPalette} size={18} />
-              <Link href="/more" aria-label="Menu" className="inline-grid size-9 place-items-center rounded-md text-muted hover:bg-hover"><Menu size={18} aria-hidden strokeWidth={1.75} /></Link>
-            </header>
-            <main id="main" className="min-w-0 flex-1 px-4 pt-5 pb-28 lg:px-10 lg:pt-8 lg:pb-12">{children}</main>
+          <div className="flex flex-col gap-2">
+            <Link href="/capture" className="flex h-10 items-center gap-2 rounded-[10px] bg-primary px-3 text-[13.5px] font-semibold text-primary-fg hover:bg-primary-hover">
+              <Plus size={16} aria-hidden strokeWidth={2} />
+              <span className="flex-1">New capture</span>
+              <span aria-hidden className="rounded-[5px] bg-black/10 px-1.5 py-px font-mono text-[11px]">N</span>
+            </Link>
+            <button type="button" onClick={openPalette} className="flex h-9 items-center gap-2 rounded-[10px] border border-line bg-surface px-2.5 text-[13px] text-muted hover:bg-hover">
+              <Search size={16} aria-hidden strokeWidth={1.8} />
+              <span className="flex-1 text-left">Search or jump to…</span>
+              <span aria-hidden className="font-mono text-[11px] text-faint">{modKey} K</span>
+            </button>
           </div>
+
+          <nav aria-label="Sections" className="flex flex-col gap-0.5">
+            {NAV.map((n) => {
+              const on = isActive(path, n);
+              return (
+                <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px]", on ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover/60 hover:text-fg")}>
+                  <n.icon size={17} aria-hidden strokeWidth={1.8} />
+                  {n.label}
+                  {n.href === "/inbox" && reviewCount > 0 && <span className="ml-auto rounded-full bg-ai-bg px-[7px] py-px font-mono text-[11px] text-accent" aria-label={`${reviewCount} to review`}>{reviewCount}</span>}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {active.length > 0 && (
+            <div className="min-h-0 overflow-y-auto">
+              <Link href="/projects" className="block px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] text-faint uppercase hover:text-fg">Projects</Link>
+              <ul className="flex flex-col gap-0.5">
+                {active.slice(0, 8).map((p) => (
+                  <li key={p.id}>
+                    <Link href={`/projects/${p.id}`} aria-current={onProject(p.id) ? "page" : undefined} className={cx("flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] hover:bg-hover/60 hover:text-fg", onProject(p.id) ? "bg-hover text-fg" : "text-muted")}>
+                      <ProjectSquare color={projectColorVar(p.color_index)} />
+                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                      <span className="font-mono text-[11px] text-faint">{p.open_tasks}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="mt-auto flex flex-col gap-2">
+            <div className="flex flex-col gap-0.5 rounded-[10px] border border-line px-3 py-2.5" role="status">
+              <div className="flex items-center gap-2 text-[12.5px]">
+                <span aria-hidden className={cx("size-[7px] rounded-full", ollama === undefined ? "bg-faint" : ollama ? "bg-ok" : "bg-danger")} />
+                {ollama === undefined ? "Checking the local AI…" : ollama ? `${model ?? "Local model"} is running` : "Local AI is offline"}
+              </div>
+              <div className="text-xs text-faint">Local only · nothing leaves this PC</div>
+            </div>
+            <Link href="/settings" aria-current={path === "/settings" || path.startsWith("/settings/") || path === "/automations" ? "page" : undefined} className={cx("flex h-[34px] items-center gap-2.5 rounded-lg px-2.5 text-[13px] hover:bg-hover/60 hover:text-fg", path === "/settings" || path === "/automations" ? "bg-hover text-fg" : "text-muted")}>
+              <SlidersHorizontal size={16} aria-hidden strokeWidth={1.8} />
+              Settings &amp; automations
+            </Link>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* ---------- phone: slim back bar on pages without their own header ---------- */}
+          {!ownHeader && (
+            <header className="safe-top sticky top-0 z-30 flex h-[calc(3rem+env(safe-area-inset-top))] items-center gap-1 border-b border-line bg-bg/95 px-2 backdrop-blur lg:hidden">
+              <button type="button" onClick={() => router.back()} aria-label="Back" className="grid size-11 place-items-center rounded-lg text-muted hover:bg-hover"><ChevronLeft size={22} aria-hidden /></button>
+              <Link href="/" className="flex-1 truncate text-sm font-semibold tracking-tight">Second Brain</Link>
+              <button type="button" onClick={openPalette} aria-label="Search and commands" className="grid size-11 place-items-center rounded-lg text-muted hover:bg-hover"><Search size={19} aria-hidden strokeWidth={1.8} /></button>
+            </header>
+          )}
+          <main id="main" className={cx("min-w-0 flex-1 px-4 pt-5 lg:px-10 lg:pt-8 lg:pb-12", tabs ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))]" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]")}>{children}</main>
         </div>
+      </div>
 
-        {/* ---------- mobile bottom nav ---------- */}
-        <nav aria-label="Mobile" className="safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 items-end border-t border-line bg-sidebar/95 backdrop-blur lg:hidden">
-          {[
-            { href: "/", label: "Home", icon: Home },
-            { href: "/inbox", label: "Inbox", icon: Inbox },
-            { href: "/capture", label: "Capture", icon: PenLine },
-            { href: "/search", label: "Search", icon: Search },
-            { href: "/more", label: "More", icon: Menu },
-          ].map((n) => {
-            const on = isActive(path, n.href);
-            const fab = n.href === "/capture";
-            return (
-              <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("relative flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] font-medium", on ? "text-accent" : "text-muted")}>
-                {fab ? (
-                  <span className="-mt-5 grid size-12 place-items-center rounded-full bg-accent text-accent-fg shadow-lg ring-4 ring-bg"><n.icon size={20} aria-hidden strokeWidth={2} /></span>
-                ) : (
-                  <span className="relative">
-                    <n.icon size={20} aria-hidden strokeWidth={1.75} />
-                    {n.href === "/inbox" && reviewCount > 0 && <span className="tnum absolute -top-1.5 -right-2.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] leading-4 text-accent-fg" aria-label={`${reviewCount} awaiting review`}>{reviewCount}</span>}
-                  </span>
-                )}
-                <span>{n.label}</span>
-                {on && !fab && <span aria-hidden className="absolute top-0 h-0.5 w-8 rounded-full bg-accent" />}
-              </Link>
-            );
-          })}
-        </nav>
+      {/* ---------- phone tab bar ---------- */}
+      {tabs && <nav aria-label="Mobile" className="safe-bottom fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-sidebar px-1 pt-1 lg:hidden">
+        {NAV.map((n) => {
+          const on = isActive(path, n);
+          return (
+            <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[3px] text-[11px]", on ? "font-semibold text-fg" : "text-faint")}>
+              <span className="relative grid">
+                <n.icon size={22} aria-hidden strokeWidth={1.8} />
+                {n.href === "/inbox" && reviewCount > 0 && <span className="absolute -top-[5px] -right-2.5 h-4 min-w-4 rounded-full bg-accent px-1 text-center text-[10.5px] leading-4 font-bold text-accent-fg" aria-label={`${reviewCount} to review`}>{reviewCount}</span>}
+              </span>
+              {n.label}
+            </Link>
+          );
+        })}
+      </nav>}
 
-        <CommandPalette open={palette} onClose={() => setPalette(false)} projects={projects.data?.projects ?? []} />
-      </ToastProvider>
+      <CommandPalette open={palette} onClose={() => setPalette(false)} projects={active.map((p) => ({ id: p.id, name: p.name }))} />
     </PaletteCtx.Provider>
+  );
+}
+
+export function Shell({ children }: { children: ReactNode }) {
+  const path = usePathname();
+  return (
+    <ToastProvider>
+      <ProjectsProvider refreshOn={path}>
+        <ShellInner>{children}</ShellInner>
+      </ProjectsProvider>
+    </ToastProvider>
   );
 }

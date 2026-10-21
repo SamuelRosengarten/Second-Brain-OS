@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, fmtDate, useApi } from "@/components/client";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { Badge, Button, Card, CardTitle, EmptyState, ErrorBox, PageHeader, useToast } from "@/components/ui";
 
 interface Run { id: string; job: string; status: "running" | "ok" | "error"; detail: string; started_at: string; finished_at: string | null }
@@ -31,7 +32,8 @@ export default function AutomationsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader title="Automations" subtitle="Small, fixed jobs you start yourself. No scheduled or autonomous actions in this release." />
+      <PageHeader title="Settings & automations" subtitle="Automations are small, fixed jobs you start yourself. Nothing runs on its own." />
+      <SettingsTabs />
       <div className="grid gap-4 lg:grid-cols-3">
         {JOBS.map((j) => (
           <Card key={j.id} className="flex flex-col">

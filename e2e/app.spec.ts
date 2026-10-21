@@ -7,7 +7,7 @@ async function login(page: Page) {
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByLabel("Quick capture")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Good |Working late)/ })).toBeVisible();
 }
 
 test.describe.configure({ mode: "serial" });
@@ -25,24 +25,29 @@ test("capture -> AI proposal -> note -> search -> task", async ({ page }) => {
 
   // capture (saved before AI), then process
   await page.goto("/capture");
-  await page.getByLabel("Capture content").fill("Build a raised-bed tomato garden and buy cedar boards for it");
-  await page.getByRole("checkbox").uncheck();
-  await page.getByRole("button", { name: "Save capture" }).click();
-  await page.getByRole("link", { name: /Open in inbox/ }).click();
-  await expect(page.getByText("Your capture")).toBeVisible();
+  await page.getByLabel("What is on your mind?").fill("Build a raised-bed tomato garden and buy cedar boards for it");
+  await page.getByText("Let my local AI tidy it up").click();
+  await expect(page.getByRole("switch")).not.toBeChecked();
+  await page.getByRole("button", { name: "Save to inbox" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/inbox");
+  await page.getByRole("tab", { name: /Unprocessed/ }).click();
+  await page.getByRole("link", { name: /raised-bed tomato garden/ }).first().click();
+  await expect(page.getByText("You captured")).toBeVisible();
   await page.getByRole("button", { name: "Process with local AI" }).click();
-  await expect(page.getByLabel("Title")).toHaveValue("E2E tomato garden");
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("E2E tomato garden");
 
-  // accept with a task
-  await page.getByLabel("Also create a task from this action").check();
-  await page.getByRole("button", { name: "Save as note" }).click();
+  // accept with its suggested task
+  await page.getByRole("checkbox", { name: /^Create task: / }).first().check();
+  await page.getByRole("button", { name: /^Accept: save note/ }).click();
+  await page.getByRole("button", { name: "Open note" }).click();
   await expect(page).toHaveURL(/\/knowledge\/.+/);
   await expect(page.getByRole("heading", { name: "E2E tomato garden" })).toBeVisible();
   await expect(page.getByText(/vault\/e2e-tomato-garden/)).toBeVisible();
 
   // keyword search finds it and shows where it came from
   await page.goto("/knowledge");
-  await page.getByLabel("Search your library").fill("cedar");
+  await page.getByLabel("Search notes").fill("cedar");
   await expect(page.getByText("E2E tomato garden").first()).toBeVisible();
   await expect(page.getByText(/\.md$/).first()).toBeVisible();
 
@@ -58,14 +63,16 @@ test("duplicate captures are not stored twice", async ({ page }) => {
   await login(page);
   for (let i = 0; i < 2; i++) {
     await page.goto("/capture");
-    await page.getByLabel("Capture content").fill("Exactly the same thought");
-    await page.getByRole("checkbox").uncheck();
-    await page.getByRole("button", { name: "Save capture" }).click();
-    await expect(page.getByRole("link", { name: /Open in inbox/ })).toBeVisible();
+    await page.getByLabel("What is on your mind?").fill("Exactly the same thought");
+    await page.getByText("Let my local AI tidy it up").click();
+  await expect(page.getByRole("switch")).not.toBeChecked();
+    await page.getByRole("button", { name: "Save to inbox" }).click();
+    await expect(page).toHaveURL(/\/$/);
   }
   await page.goto("/inbox");
-  await page.getByLabel("Search inbox").fill("Exactly the same thought");
-  await expect(page.locator("main ul li")).toHaveCount(1);
+  await page.getByRole("tab", { name: /Unprocessed/ }).click();
+  await page.getByLabel("Search the inbox").fill("Exactly the same thought");
+  await expect(page.getByRole("link", { name: /Exactly the same thought/ })).toHaveCount(1);
 });
 
 test("projects: create, add task, link note, briefing", async ({ page }) => {
@@ -82,7 +89,7 @@ test("projects: create, add task, link note, briefing", async ({ page }) => {
   await page.getByRole("button", { name: "Link", exact: true }).click();
   await expect(page.locator("main").getByRole("link", { name: "E2E tomato garden" })).toBeVisible();
   await page.goto("/");
-  await expect(page.getByText("Calendar events are not shown: no calendar is connected.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Good |Working late)/ })).toBeVisible();
 });
 
 test("AI workspace: new conversation does not crash; grounded answer cites the note; refusal path works", async ({ page }) => {
@@ -92,17 +99,16 @@ test("AI workspace: new conversation does not crash; grounded answer cites the n
   await page.goto("/ai");
   // regression: clicking this once crashed the whole page
   await page.getByRole("button", { name: "New conversation" }).click();
-  await expect(page.getByText("Ask anything")).toBeVisible();
+  await expect(page.getByText("Ask about your notes, tasks and projects")).toBeVisible();
 
   await page.getByLabel("Message").fill("What should I buy for the garden?");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Based on your notes, buy cedar boards [1].")).toBeVisible();
-  await expect(page.getByText("Uses your library")).toBeVisible();
-  await page.getByText(/Used \d+ library passage/).click();
-  await expect(page.getByRole("link", { name: /\[1\] E2E tomato garden/ })).toBeVisible();
+  await expect(page.locator(".md").filter({ hasText: /buy cedar boards/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Uses your library" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("complementary", { name: "Sources" }).getByRole("link", { name: /E2E tomato garden/ }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "New conversation" }).click();
-  await page.getByLabel("Answer from my library").uncheck();
+  await page.getByRole("button", { name: "Uses your library" }).click();
   await page.getByLabel("Message").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Plain local reply.")).toBeVisible();
@@ -112,7 +118,7 @@ test("AI workspace: new conversation does not crash; grounded answer cites the n
 test("Claude handoff builds a reviewable package locally", async ({ page }) => {
   await login(page);
   await page.goto("/ai");
-  await page.getByRole("tab", { name: "Claude handoff" }).click();
+  await page.getByRole("button", { name: "Build a Claude package" }).click();
   await page.getByLabel("E2E tomato garden").check();
   await page.getByLabel("Your question").fill("What next?");
   await page.getByRole("button", { name: "Build package" }).click();
@@ -139,7 +145,7 @@ test("command palette: Ctrl+K opens, filters, navigates with the keyboard and cl
   const input = page.getByRole("combobox", { name: "Search commands and notes" });
   await expect(input).toBeFocused();
   await input.fill("tasks");
-  await expect(page.getByRole("option", { name: /Tasks/ }).first()).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("option", { name: /All tasks/ }).first()).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/tasks$/);
   await page.keyboard.press("Control+k");
@@ -157,7 +163,7 @@ test("command palette: Ctrl+K opens, filters, navigates with the keyboard and cl
 test("note editor: write, safe Markdown preview, save, and rendered view", async ({ page }) => {
   await login(page);
   await page.goto("/knowledge?new=1");
-  await page.getByLabel("Title").fill("Editor test note");
+  await page.getByRole("dialog").getByLabel("Title").fill("Editor test note");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/knowledge\/.+/);
   await page.getByRole("button", { name: "Edit" }).click();
@@ -239,8 +245,7 @@ for (const timezoneId of ["Pacific/Kiritimati", "Pacific/Pago_Pago"]) {
       await expect(page.getByRole("heading", { name: /^Today · 1$/ })).toBeVisible();
 
       await page.goto("/");
-      await expect(page.getByText(/\b1 due today/)).toBeVisible();
-      await expect(page.getByText(/\b0 overdue/)).toBeVisible();
+      await expect(page.getByText(/One task is due today\./)).toBeVisible();
 
       await page.goto("/tasks");
       await page.locator("main li").filter({ hasText: `Due on the device today ${timezoneId}` }).getByRole("button", { name: /^Delete / }).click();

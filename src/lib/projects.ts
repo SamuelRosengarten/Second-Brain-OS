@@ -25,6 +25,8 @@ const taskShape = {
   due_date: dateStr.nullable().optional(),
   project_id: z.string().nullable().optional(),
   capture_id: z.string().nullable().optional(),
+  /** Planned effort in minutes; the Week plan adds these up per day. */
+  estimate_min: z.number().int().min(1).max(1440).nullable().optional(),
 };
 export const TaskInput = z.object({ ...taskShape, description: taskShape.description.default(""), status: taskShape.status.default("todo"), priority: taskShape.priority.default("medium") });
 export const TaskPatch = z.object(taskShape).partial();
@@ -36,6 +38,7 @@ export interface Project {
 export interface Task {
   id: string; title: string; description: string; status: "todo" | "doing" | "done"; priority: "low" | "medium" | "high";
   due_date: string | null; project_id: string | null; capture_id: string | null; created_at: string; completed_at: string | null;
+  estimate_min: number | null;
   /** Set while the task is in the trash. Trashed tasks are hidden from every list except listTrash(). */
   deleted_at: string | null;
 }
@@ -60,14 +63,16 @@ export function createProject(input: z.input<typeof ProjectInput>): Project {
 export const getProject = (id: string): Project | null =>
   (getDb().prepare("SELECT * FROM projects WHERE id = ?").get(id) as Project | undefined) ?? null;
 
-export function listProjects(status?: string): (Project & { open_tasks: number; note_count: number })[] {
+export type ProjectRow = Project & { open_tasks: number; note_count: number; color_index: number };
+export function listProjects(status?: string): ProjectRow[] {
   return getDb()
     .prepare(
       `SELECT p.*, (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status <> 'done' AND t.deleted_at IS NULL) AS open_tasks,
-              (SELECT COUNT(*) FROM project_notes pn WHERE pn.project_id = p.id) AS note_count
+              (SELECT COUNT(*) FROM project_notes pn WHERE pn.project_id = p.id) AS note_count,
+              (SELECT COUNT(*) FROM projects q WHERE q.created_at < p.created_at OR (q.created_at = p.created_at AND q.id < p.id)) AS color_index
        FROM projects p ${status ? "WHERE p.status = ?" : ""} ORDER BY p.status = 'archived', p.updated_at DESC`,
     )
-    .all(...(status ? [status] : [])) as (Project & { open_tasks: number; note_count: number })[];
+    .all(...(status ? [status] : [])) as ProjectRow[];
 }
 
 export function updateProject(id: string, patch: z.input<typeof ProjectPatch>): Project {
@@ -123,8 +128,8 @@ export function createTask(input: z.input<typeof TaskInput>): Task {
   const id = newId();
   const now = nowIso();
   db.prepare(
-    "INSERT INTO tasks (id, title, description, status, priority, due_date, project_id, capture_id, created_at, completed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-  ).run(id, t.title, t.description, t.status, t.priority, t.due_date ?? null, t.project_id ?? null, t.capture_id ?? null, now, t.status === "done" ? now : null);
+    "INSERT INTO tasks (id, title, description, status, priority, due_date, project_id, capture_id, created_at, completed_at, estimate_min) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+  ).run(id, t.title, t.description, t.status, t.priority, t.due_date ?? null, t.project_id ?? null, t.capture_id ?? null, now, t.status === "done" ? now : null, t.estimate_min ?? null);
   logActivity(t.project_id, "task.created", `Task “${t.title}” added`);
   return getTask(id)!;
 }
@@ -133,6 +138,10 @@ export const getTask = (id: string): Task | null => (getDb().prepare("SELECT * F
 
 export interface TaskFilter {
   status?: string; priority?: string; project_id?: string; due?: "overdue" | "today" | "soon"; limit?: number;
+  /** Inclusive due-date range (YYYY-MM-DD), any status: the Week plan and the "this week" chart. */
+  dueFrom?: string; dueTo?: string;
+  /** Only tasks finished at or after this ISO instant ("completed today" passes the caller's local midnight). */
+  completedSince?: string;
   /** The caller's calendar date (YYYY-MM-DD). Defaults to the server clock; a phone in another timezone passes its own. */
   today?: string;
 }
@@ -144,6 +153,9 @@ export function listTasks(f: TaskFilter = {}): Task[] {
   else if (f.status) { where.push("status = ?"); args.push(f.status); }
   if (f.priority) { where.push("priority = ?"); args.push(f.priority); }
   if (f.project_id) { where.push("project_id = ?"); args.push(f.project_id); }
+  if (f.dueFrom) { where.push("due_date IS NOT NULL AND due_date >= ?"); args.push(f.dueFrom); }
+  if (f.dueTo) { where.push("due_date IS NOT NULL AND due_date <= ?"); args.push(f.dueTo); }
+  if (f.completedSince) { where.push("status = 'done' AND completed_at >= ?"); args.push(f.completedSince); }
   if (f.due === "overdue") { where.push("status <> 'done' AND due_date IS NOT NULL AND due_date < ?"); args.push(today); }
   if (f.due === "today") { where.push("status <> 'done' AND due_date = ?"); args.push(today); }
   if (f.due === "soon") {
@@ -170,8 +182,8 @@ export function updateTask(id: string, patch: z.input<typeof TaskPatch>): Task {
   if (next.status === "done" && cur.status !== "done") completed = nowIso();
   if (next.status !== "done") completed = null;
   getDb()
-    .prepare("UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, project_id=?, completed_at=? WHERE id=?")
-    .run(next.title, next.description, next.status, next.priority, next.due_date ?? null, next.project_id ?? null, completed, id);
+    .prepare("UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, project_id=?, completed_at=?, estimate_min=? WHERE id=?")
+    .run(next.title, next.description, next.status, next.priority, next.due_date ?? null, next.project_id ?? null, completed, next.estimate_min ?? null, id);
   if (next.status === "done" && cur.status !== "done") logActivity(next.project_id, "task.done", `Completed “${next.title}”`);
   return getTask(id)!;
 }

@@ -67,15 +67,15 @@ export function CommandPalette({ open, onClose, projects }: { open: boolean; onC
       { id: "new-note", group: "Create", label: "New note", icon: FileText, keywords: "write create", run: go("/knowledge?new=1") },
       { id: "new-task", group: "Create", label: "New task", icon: ListTodo, keywords: "todo add", run: go("/tasks?new=1") },
       { id: "new-project", group: "Create", label: "New project", icon: Plus, keywords: "create", run: go("/projects?new=1") },
-      { id: "home", group: "Go to", label: "Home", hint: "Daily briefing", icon: Home, keywords: "dashboard briefing today", run: go("/") },
+      { id: "home", group: "Go to", label: "Today", hint: "Focus, captures to review, this week", icon: Home, keywords: "home dashboard briefing", run: go("/") },
       { id: "inbox", group: "Go to", label: "Inbox", icon: Inbox, run: go("/inbox") },
       { id: "notes", group: "Go to", label: "Notes", hint: "Knowledge library", icon: FileText, keywords: "knowledge library", run: go("/knowledge") },
-      { id: "tasks", group: "Go to", label: "Tasks", icon: ListTodo, run: go("/tasks") },
+      { id: "tasks", group: "Go to", label: "All tasks", hint: "Lists, filters and the trash", icon: ListTodo, run: go("/tasks") },
       { id: "projects", group: "Go to", label: "Projects", icon: FolderKanban, run: go("/projects") },
-      { id: "workflow", group: "Go to", label: "Workflow", hint: "Plan the week: timeline, dependencies and graph", icon: Waypoints, keywords: "pipeline timeline gantt roadmap schedule board deadlines dependencies critical path graph", run: go("/workflow") },
-      { id: "ai", group: "Go to", label: "Ask AI", hint: "Local chat and Claude handoff", icon: Sparkles, keywords: "chat ollama assistant", run: go("/ai") },
+      { id: "workflow", group: "Go to", label: "Plan", hint: "Week, timeline and graph", icon: Waypoints, keywords: "workflow pipeline timeline gantt roadmap schedule board deadlines dependencies critical path graph week", run: go("/plan") },
+      { id: "ai", group: "Go to", label: "Ask", hint: "Local chat and Claude package", icon: Sparkles, keywords: "ai chat ollama assistant", run: go("/ai") },
       { id: "automations", group: "Go to", label: "Automations", icon: Workflow, keywords: "jobs", run: go("/automations") },
-      { id: "settings", group: "Go to", label: "Settings", hint: "Models, backup, theme", icon: Settings, keywords: "backup model theme sign out", run: go("/settings") },
+      { id: "settings", group: "Go to", label: "Settings & automations", hint: "Models, backup, theme, jobs", icon: Settings, keywords: "backup model theme sign out", run: go("/settings") },
       ...projects.map<Cmd>((p) => ({ id: `p-${p.id}`, group: "Projects", label: p.name, hint: "Open project", icon: FolderKanban, run: go(`/projects/${p.id}`) })),
     ];
     const low = term.toLowerCase();
@@ -83,7 +83,7 @@ export function CommandPalette({ open, onClose, projects }: { open: boolean; onC
     const extra: Cmd[] = [];
     if (term.length >= 2) {
       extra.push(
-        { id: "search", group: "Search", label: `Search notes for “${term}”`, hint: "Keyword + semantic", icon: Search, run: go(`/search?q=${encodeURIComponent(term)}`) },
+        { id: "search", group: "Search", label: `Search notes for “${term}”`, hint: "Keyword + semantic", icon: Search, run: go(`/knowledge?q=${encodeURIComponent(term)}`) },
         { id: "ask", group: "Search", label: `Ask AI: “${term}”`, hint: "Uses your library", icon: Sparkles, run: go(`/ai?q=${encodeURIComponent(term)}`) },
         ...notes.map<Cmd>((n) => ({ id: `n-${n.id}`, group: "Notes", label: n.title, hint: "Open note", icon: FileText, run: go(`/knowledge/${n.id}`) })),
       );

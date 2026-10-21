@@ -10,6 +10,7 @@ const proposal = {
   tags: ["garden", "tomato"],
   related_projects: [],
   next_action: "Buy cedar boards",
+  tasks: [{ title: "Sketch the raised-bed layout", due_date: "" }, { title: "Measure the backyard corner" }],
   open_questions: ["Where exactly?"],
   confidence: "medium",
   uncertainty: "Location not given.",
