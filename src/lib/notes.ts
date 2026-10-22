@@ -55,7 +55,7 @@ export function parseMarkdown(text: string): { meta: Record<string, unknown>; bo
       meta[key] = raw.replace(/^["']|["']$/g, "");
     }
   }
-  return { meta, body: text.slice(m[0].length).replace(/^\n+/, "") };
+  return { meta, body: text.slice(m[0].length).replace(/^(?:\r?\n)+/, "") };
 }
 
 const cleanTags = (tags: unknown): string[] =>
