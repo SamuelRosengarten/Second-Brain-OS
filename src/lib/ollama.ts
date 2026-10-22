@@ -130,20 +130,27 @@ export class OllamaProvider implements LlmProvider {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
+    const piece = (raw: string): string | null => {
+      const line = raw.trim();
+      if (!line) return null;
+      const evt = JSON.parse(line) as { message?: { content?: string }; error?: string };
+      if (evt.error) throw new OllamaError("bad_response", evt.error);
+      return evt.message?.content || null;
+    };
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim();
+        const text = piece(buf.slice(0, nl));
         buf = buf.slice(nl + 1);
-        if (!line) continue;
-        const evt = JSON.parse(line) as { message?: { content?: string }; error?: string };
-        if (evt.error) throw new OllamaError("bad_response", evt.error);
-        if (evt.message?.content) yield evt.message.content;
+        if (text) yield text;
       }
     }
+    // A last event that arrives without a trailing newline still counts.
+    const last = piece(buf + decoder.decode());
+    if (last) yield last;
   }
 
   async chatJson(model: string, messages: ChatMessage[], schema: object, signal?: AbortSignal): Promise<unknown> {
