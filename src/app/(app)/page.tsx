@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
-import { Plus, Search, SlidersHorizontal } from "lucide-react";
+import { CloudUpload, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AiHeading, AiPanel, Eyebrow, ProjectSquare, TaskCircle, useProjects } from "@/components/blocks";
 import { api, localToday, useApi } from "@/components/client";
+import { flushQueue, useQueuedCount } from "@/components/offline-queue";
 import { useOpenPalette } from "@/components/shell";
 import { TodayCapture } from "@/components/today-capture";
 import { ErrorBox, ListSkeleton, useToast } from "@/components/ui";
@@ -101,6 +102,7 @@ export default function TodayPage() {
   const today = localToday();
   const toast = useToast();
   const openPalette = useOpenPalette();
+  const queued = useQueuedCount();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   const briefing = useApi<Briefing>(`/api/briefing?today=${today}`);
@@ -143,6 +145,11 @@ export default function TodayPage() {
           {b && <p className="m-0 max-w-[640px] text-[15px] text-pretty text-muted">{summary(b)}</p>}
         </div>
         <div className="flex gap-2 lg:hidden">
+          {queued > 0 && (
+            <button type="button" onClick={() => void flushQueue().then((n) => { if (n > 0) reload(); })} aria-label={`${queued} ${queued === 1 ? "capture" : "captures"} waiting to sync with your PC. Tap to retry`} className="flex h-11 items-center gap-[7px] rounded-full border px-3 text-[13px] font-medium text-warn" style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)", background: "color-mix(in srgb, var(--warn) 8%, transparent)" }}>
+              <CloudUpload size={16} aria-hidden strokeWidth={1.8} />{queued} waiting
+            </button>
+          )}
           <button type="button" onClick={openPalette} aria-label="Search" className="grid size-11 place-items-center rounded-xl border border-line bg-surface text-muted"><Search size={19} aria-hidden strokeWidth={1.8} /></button>
           <Link href="/settings" aria-label="Settings and automations" className="grid size-11 place-items-center rounded-xl border border-line bg-surface text-muted"><SlidersHorizontal size={19} aria-hidden strokeWidth={1.8} /></Link>
         </div>

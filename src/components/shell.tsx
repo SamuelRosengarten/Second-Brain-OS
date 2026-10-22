@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, ChevronLeft, FileText, Inbox, Plus, Search, SlidersHorizontal, Sparkles, Sun, type LucideIcon } from "lucide-react";
+import { Briefcase, CalendarDays, ChevronLeft, FileText, Inbox, Plus, Search, SlidersHorizontal, Sparkles, Sun, type LucideIcon } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { ProjectSquare, ProjectsProvider, projectColorVar, useProjects } from "./blocks";
 import { useApi } from "./client";
 import { CommandPalette } from "./command-palette";
-import { cx, ToastProvider } from "./ui";
+import { flushQueue } from "./offline-queue";
+import { cx, ToastProvider, useToast } from "./ui";
 
 interface NavItem { href: string; label: string; icon: LucideIcon; match: string[] }
 const NAV: NavItem[] = [
@@ -16,8 +17,10 @@ const NAV: NavItem[] = [
   { href: "/plan", label: "Plan", icon: CalendarDays, match: ["/plan", "/workflow", "/tasks", "/pipeline"] },
   { href: "/ai", label: "Ask", icon: Sparkles, match: ["/ai"] },
 ];
+/** Phone tab bar: Postings sits where Inbox is on desktop (the inbox is reached from Today). */
+const PHONE_NAV: NavItem[] = NAV.map((n) => (n.href === "/inbox" ? { href: "/postings", label: "Postings", icon: Briefcase, match: ["/postings"] } : n));
 /** Pages that draw their own phone header (and need no slim top bar). */
-const OWN_HEADER = ["/", "/inbox", "/knowledge", "/plan", "/workflow", "/ai", "/capture"];
+const OWN_HEADER = ["/", "/inbox", "/postings", "/knowledge", "/plan", "/workflow", "/ai", "/capture"];
 /** Full-screen phone flows have no tab bar. */
 const NO_TABS = ["/capture", "/inbox/review"];
 
@@ -45,12 +48,25 @@ function ShellInner({ children }: { children: ReactNode }) {
   const [palette, setPalette] = useState(false);
   const review = useApi<{ captures: unknown[] }>("/api/captures?status=proposed");
   const status = useApi<Status>("/api/status");
+  const links = useApi<{ count: number }>("/api/workflow/suggestions");
   const { projects } = useProjects();
   const reviewCount = review.data?.captures.length ?? 0;
   const { reload: reloadReview } = review;
+  const { reload: reloadLinks } = links;
+  const waiting = reviewCount + (links.data?.count ?? 0);
   const [modKey, setModKey] = useState("Ctrl");
 
-  useEffect(() => { void reloadReview(); }, [path, reloadReview]);
+  useEffect(() => { void reloadReview(); void reloadLinks(); }, [path, reloadReview, reloadLinks]);
+  // Captures saved on this device while the server was unreachable are sent when it is back (and whenever the app is reopened).
+  const toast = useToast();
+  useEffect(() => {
+    const send = () => void flushQueue().then((n) => { if (n > 0) { toast(`Sent ${n} ${n === 1 ? "capture" : "captures"} saved on this device`, "ok"); void reloadReview(); } });
+    send();
+    const visible = () => { if (document.visibilityState === "visible") send(); };
+    window.addEventListener("online", send);
+    document.addEventListener("visibilitychange", visible);
+    return () => { window.removeEventListener("online", send); document.removeEventListener("visibilitychange", visible); };
+  }, [toast, reloadReview]);
   useEffect(() => { if (/Mac|iPhone|iPad/.test(navigator.platform)) setModKey("⌘"); }, []);
   // Ctrl/Cmd+K opens the palette anywhere; a bare "n" (outside text fields) starts a new capture.
   useEffect(() => {
@@ -114,7 +130,19 @@ function ShellInner({ children }: { children: ReactNode }) {
                 </Link>
               );
             })}
+            <Link href="/postings" aria-current={path === "/postings" ? "page" : undefined} className={cx("flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px]", path === "/postings" ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover/60 hover:text-fg")}>
+              <Briefcase size={17} aria-hidden strokeWidth={1.8} />
+              Postings
+            </Link>
           </nav>
+
+          {waiting > 0 && (
+            <Link href={reviewCount > 0 ? "/inbox" : "/plan"} className="-mt-2.5 flex min-h-9 items-center gap-2.5 rounded-lg border border-dashed border-ai-line bg-ai-soft px-2.5 text-[13px] text-accent hover:bg-ai-bg">
+              <Sparkles size={15} aria-hidden strokeWidth={1.8} />
+              AI suggestions
+              <span className="ml-auto font-mono text-[11px]">{waiting} waiting</span>
+            </Link>
+          )}
 
           {active.length > 0 && (
             <div className="min-h-0 overflow-y-auto">
@@ -163,7 +191,7 @@ function ShellInner({ children }: { children: ReactNode }) {
 
       {/* ---------- phone tab bar ---------- */}
       {tabs && <nav aria-label="Mobile" className="safe-bottom fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-sidebar px-1 pt-1 lg:hidden">
-        {NAV.map((n) => {
+        {PHONE_NAV.map((n) => {
           const on = isActive(path, n);
           return (
             <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[3px] text-[11px]", on ? "font-semibold text-fg" : "text-faint")}>

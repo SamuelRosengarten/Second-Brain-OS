@@ -3,6 +3,7 @@ import { ApiError, route } from "@/lib/api";
 import { processAllPending } from "@/lib/captures";
 import { getDb } from "@/lib/db";
 import { reindexVault } from "@/lib/notes";
+import { runScout } from "@/lib/scout";
 import { embedPending } from "@/lib/search";
 import { newId, nowIso } from "@/lib/util";
 
@@ -24,9 +25,13 @@ const JOBS = {
     const r = await embedPending(2000);
     return { detail: r.error ? `Embedded ${r.embedded}. ${r.error} ${r.hint ?? ""}` : `Embedded ${r.embedded} chunk(s).`, failed: !!r.error };
   },
+  "run-scout": async () => {
+    const r = await runScout();
+    return { detail: `Found ${r.found}, added ${r.added} new${r.skipped ? `, ${r.skipped} unusable` : ""}. ${r.notes}`.slice(0, 300), failed: false };
+  },
 } as const;
 
-export const POST = route({ body: z.object({ job: z.enum(["process-pending", "reindex-vault", "build-embeddings"]) }) }, async ({ body }) => {
+export const POST = route({ body: z.object({ job: z.enum(["process-pending", "reindex-vault", "build-embeddings", "run-scout"]) }) }, async ({ body }) => {
   const db = getDb();
   const since = new Date(Date.now() - 10 * 60_000).toISOString();
   if (db.prepare("SELECT 1 FROM job_runs WHERE job = ? AND status = 'running' AND started_at > ?").get(body.job, since)) {

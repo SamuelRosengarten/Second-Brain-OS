@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { ArrowRight, Check, FileText, X } from "lucide-react";
-import { useState } from "react";
+import { Sparkles, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { dowDay, shortDow } from "@/lib/dates";
 import { wouldCycle } from "@/lib/workflow-logic";
 import { AiPanel, ProjectSquare } from "../blocks";
@@ -15,7 +15,7 @@ export interface PlanInspectorProps {
   model: Model;
   id: string | null;
   today: string;
-  /** "graph" lists every connection with its kind (BLOCKS, NOTE, TAG…); "week" groups them. */
+  /** Both list every connection with its kind (BLOCKS, AFTER, NOTE, TAG…); "graph" also names the project and offers Show on week. */
   variant: "week" | "graph";
   onJump: (id: string) => void;
   onToggleDone: (id: string) => void;
@@ -27,12 +27,30 @@ export interface PlanInspectorProps {
   onDismiss: (suggestionId: string) => void;
   onShowOnWeek?: (id: string) => void;
   onShowInGraph?: (id: string) => void;
+  /** Press A / D to accept / dismiss the first suggestion (off while another panel owns those keys, or in a sheet). */
+  keys?: boolean;
+  /** Deselects the task; shows a close button when given. */
+  onClose?: () => void;
 }
 
 export function PlanInspector(p: PlanInspectorProps) {
   const m = p.model;
   const e = p.id ? m.entities.get(p.id) : undefined;
   const [pick, setPick] = useState("");
+  const first = p.id ? m.suggestions.find((s) => s.a === p.id || s.b === p.id) : undefined;
+  const { keys, onAccept, onDismiss } = p;
+  useEffect(() => {
+    if (!keys || !first) return;
+    const h = (ev: KeyboardEvent) => {
+      const el = ev.target as HTMLElement | null;
+      if (ev.ctrlKey || ev.metaKey || ev.altKey || (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) || document.querySelector("dialog[open]")) return;
+      const k = ev.key.toLowerCase();
+      if (k === "a") { ev.preventDefault(); onAccept(first.id); }
+      else if (k === "d") { ev.preventDefault(); onDismiss(first.id); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [keys, first, onAccept, onDismiss]);
   if (!p.id || !e) {
     return (
       <aside aria-label="Details" className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[18px]">
@@ -57,13 +75,30 @@ export function PlanInspector(p: PlanInspectorProps) {
     : [];
   const title = (x: string) => m.entities.get(x)?.title ?? "";
 
+  // everything this task touches: what it blocks, what it waits for, then notes, tags and the like
+  const conns: { id: string; label: string; href?: string }[] = task ? [
+    ...blocks.map((x) => ({ id: x, label: "BLOCKS" })),
+    ...waits.map((x) => ({ id: x, label: "AFTER" })),
+    ...[...(m.neighbours.get(id) ?? [])].filter((x) => !blocks.includes(x) && !waits.includes(x) && m.entities.get(x)?.kind !== "project").map((x) => ({ id: x, label: (m.entities.get(x)?.kind ?? "").toUpperCase() })),
+    ...[...noteIds].filter((n) => !m.neighbours.get(id)?.has(n)).map((n) => ({ id: n, label: "NOTE", href: `/knowledge/${n}` })),
+  ] : [];
+
   const due = task?.due_date ?? null;
   const dueChip = !task ? null : task.status === "done" ? { text: "Done", cls: "bg-ok/15 text-ok" } : !due ? { text: "No date", cls: "bg-surface2 text-muted" } : due < p.today ? { text: `Overdue · ${shortDow(due)}`, cls: "bg-danger/15 text-danger" } : due === p.today ? { text: "Due today", cls: "bg-warn/15 text-warn" } : { text: dowDay(due), cls: "bg-surface2 text-muted" };
 
   return (
     <aside aria-labelledby="ins-h" className="flex flex-col gap-[18px] rounded-[14px] border border-line bg-surface p-[18px]">
       <div className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] tracking-[0.06em] text-faint uppercase">{p.variant === "graph" ? `${e.kind}${proj ? ` · ${proj.name}` : ""}` : task ? "Selected task" : e.kind}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] tracking-[0.06em] text-faint uppercase">{p.variant === "graph" ? `${e.kind}${proj ? ` · ${proj.name}` : ""}` : task ? "Selected task" : e.kind}</span>
+          {task && p.onShowOnWeek && p.onShowInGraph && (
+            <nav aria-label="Show this task in" className="ml-auto flex rounded-lg border border-line bg-bg p-0.5">
+              <button type="button" aria-current={p.variant === "week" ? "page" : undefined} onClick={() => p.onShowOnWeek!(id)} className={`h-[26px] rounded-md px-2.5 text-xs ${p.variant === "week" ? "bg-surface2 font-medium text-fg" : "text-muted hover:text-fg"}`}>Week</button>
+              <button type="button" aria-current={p.variant === "graph" ? "page" : undefined} onClick={() => p.onShowInGraph!(id)} className={`h-[26px] rounded-md px-2.5 text-xs ${p.variant === "graph" ? "bg-surface2 font-medium text-fg" : "text-muted hover:text-fg"}`}>Graph</button>
+            </nav>
+          )}
+          {p.onClose && <button type="button" aria-label="Close panel" onClick={p.onClose} className={`grid size-[30px] place-items-center rounded-lg text-muted hover:bg-hover ${task && p.onShowOnWeek ? "" : "ml-auto"}`}><X size={15} aria-hidden strokeWidth={2} /></button>}
+        </div>
         <h2 id="ins-h" className="m-0 text-[17px] leading-[1.3] font-semibold tracking-[-0.01em]">{e.title}</h2>
         {task && (
           <div className="flex flex-wrap gap-1.5">
@@ -76,66 +111,50 @@ export function PlanInspector(p: PlanInspectorProps) {
 
       {task ? (
         <>
-          {p.variant === "week" ? (
-            <>
-              <div className="flex flex-col gap-2">
-                <h3 className={h3}>Blocks</h3>
-                {blocks.length === 0 ? <p className="m-0 text-[13px] text-faint">Nothing is waiting on this.</p> : blocks.map((b) => (
-                  <button key={b} type="button" onClick={() => p.onJump(b)} className={`${row} text-left`}><ArrowRight size={14} aria-hidden strokeWidth={2} className="shrink-0 text-muted" /><span className="min-w-0 flex-1 truncate">{title(b)}</span><span className="font-mono text-[11px] text-faint">{m.graph.byId.get(b)?.due_date ? shortDow(m.graph.byId.get(b)!.due_date!) : ""}</span></button>
-                ))}
-              </div>
-              <div className="flex flex-col gap-2">
-                <h3 className={h3}>Depends on</h3>
-                {waits.length === 0 && <p className="m-0 text-[13px] text-faint">Nothing, ready to start.</p>}
-                {waits.map((w) => (
-                  <span key={w} className={row}>
-                    <button type="button" onClick={() => p.onJump(w)} className="min-w-0 flex-1 truncate text-left">{title(w)}</button>
-                    <button type="button" aria-label={`Remove dependency on ${title(w)}`} onClick={() => p.onRemoveDep(id, w)} className="grid size-8 shrink-0 place-items-center rounded-md text-faint hover:text-danger"><X size={14} aria-hidden /></button>
-                  </span>
-                ))}
-                {addable.length > 0 && (
-                  <div className="flex gap-2">
-                    <label htmlFor="add-dep" className="sr-only">Add a dependency</label>
-                    <select id="add-dep" value={pick} onChange={(ev) => setPick(ev.target.value)} className="h-10 min-w-0 flex-1 rounded-[9px] border border-line bg-surface px-2 text-[13px] text-fg">
-                      <option value="">Must wait for…</option>
-                      {addable.map((a) => <option key={a.id} value={a.id}>{a.title.length > 50 ? `${a.title.slice(0, 49)}…` : a.title}</option>)}
-                    </select>
-                    <button type="button" disabled={!pick} onClick={() => { p.onAddDep(id, pick); setPick(""); }} className="h-10 rounded-[9px] border border-line px-3 text-[13px] font-medium hover:bg-hover disabled:opacity-50">Add</button>
-                  </div>
-                )}
-              </div>
-              {noteIds.size > 0 && (
-                <div className="flex flex-col gap-2">
-                  <h3 className={h3}>Linked notes</h3>
-                  {[...noteIds].map((n) => <Link key={n} href={`/knowledge/${n}`} className={row}><FileText size={14} aria-hidden strokeWidth={1.8} className="shrink-0 text-muted" />{title(n)}</Link>)}
+          <div className="flex flex-col gap-0.5">
+            <h3 className={`${h3} mb-1.5`}>Connections · {conns.length}</h3>
+            {conns.length === 0 && <p className="m-0 text-[13px] text-faint">Not connected to anything yet.</p>}
+            {conns.map((c) => {
+              const cls = "flex min-h-[34px] min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left text-[13px] hover:bg-hover";
+              const tag = <span className="w-[52px] shrink-0 font-mono text-[10.5px] text-faint uppercase">{c.label}</span>;
+              return (
+                <div key={c.label + c.id} className="flex items-center">
+                  {c.href ? <Link href={c.href} className={cls}>{tag}<span className="min-w-0 flex-1 truncate">{title(c.id)}</span></Link> : <button type="button" onClick={() => p.onJump(c.id)} className={cls}>{tag}<span className="min-w-0 flex-1 truncate">{title(c.id)}</span>{c.label === "BLOCKS" && m.graph.byId.get(c.id)?.due_date && <span className="font-mono text-[11px] text-faint">{shortDow(m.graph.byId.get(c.id)!.due_date!)}</span>}</button>}
+                  {c.label === "AFTER" && <button type="button" aria-label={`Remove dependency on ${title(c.id)}`} onClick={() => p.onRemoveDep(id, c.id)} className="grid size-8 shrink-0 place-items-center rounded-md text-faint hover:text-danger"><X size={14} aria-hidden /></button>}
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="flex flex-col gap-1">
-              <h3 className={`${h3} mb-1`}>Connections · {new Set([...blocks, ...waits, ...[...(m.neighbours.get(id) ?? [])].filter((x) => m.entities.get(x)?.kind !== "project")]).size}</h3>
-              {[...blocks].map((b) => <button key={`b${b}`} type="button" onClick={() => p.onJump(b)} className="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-left text-[13px] hover:bg-hover"><span className="w-[52px] font-mono text-[10.5px] text-faint">BLOCKS</span>{title(b)}</button>)}
-              {[...waits].map((w) => <button key={`w${w}`} type="button" onClick={() => p.onJump(w)} className="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-left text-[13px] hover:bg-hover"><span className="w-[52px] font-mono text-[10.5px] text-faint">AFTER</span>{title(w)}</button>)}
-              {[...(m.neighbours.get(id) ?? [])].filter((x) => !blocks.includes(x) && !waits.includes(x) && m.entities.get(x)?.kind !== "project").map((x) => (
-                <button key={x} type="button" onClick={() => p.onJump(x)} className="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-left text-[13px] hover:bg-hover"><span className="w-[52px] font-mono text-[10.5px] text-faint uppercase">{m.entities.get(x)?.kind}</span>{title(x)}</button>
-              ))}
-            </div>
-          )}
+              );
+            })}
+            {addable.length > 0 && (
+              <div className="mt-2 flex gap-2">
+                <label htmlFor="add-dep" className="sr-only">Add a dependency</label>
+                <select id="add-dep" value={pick} onChange={(ev) => setPick(ev.target.value)} className="h-10 min-w-0 flex-1 rounded-[9px] border border-line bg-surface px-2 text-[13px] text-fg">
+                  <option value="">Must wait for…</option>
+                  {addable.map((a) => <option key={a.id} value={a.id}>{a.title.length > 50 ? `${a.title.slice(0, 49)}…` : a.title}</option>)}
+                </select>
+                <button type="button" disabled={!pick} onClick={() => { p.onAddDep(id, pick); setPick(""); }} className="h-10 rounded-[9px] border border-line px-3 text-[13px] font-medium hover:bg-hover disabled:opacity-50">Add</button>
+              </div>
+            )}
+          </div>
 
           {sugg.length > 0 && (
-            <AiPanel as="div" className="flex flex-col gap-2.5 p-3.5">
-              <h3 className="m-0 text-[13px] font-semibold">Suggested links <span className="float-right font-mono text-[11px] text-accent">{sugg.length} from your local model</span></h3>
-              {sugg.map((s) => (
-                <div key={s.id} className="flex flex-col gap-2 rounded-[9px] bg-surface p-3">
+            <section aria-labelledby="sug-h" className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} aria-hidden strokeWidth={1.8} className="text-accent" />
+                <h3 id="sug-h" className="m-0 text-[12.5px] font-semibold text-accent">Suggestions</h3>
+                {p.keys && <span className="ml-auto font-mono text-[10.5px] text-faint">A accept · D dismiss</span>}
+              </div>
+              {sugg.map((s, i) => (
+                <AiPanel key={s.id} as="div" className="flex flex-col gap-2 p-3">
+                  <div className="flex items-center gap-2"><span className="font-mono text-[10.5px] tracking-[0.06em] text-accent">ORDER</span><span className="ml-auto font-mono text-[10.5px] text-faint">local model</span></div>
                   <p className="m-0 text-[13px] leading-[1.45]">{s.b === id ? <>Do <strong className="font-semibold">{title(s.a)}</strong> first.</> : <><strong className="font-semibold">{title(s.b)}</strong> should wait for this one.</>}</p>
                   <p className="m-0 text-xs leading-[1.45] text-muted">{s.why}</p>
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => p.onAccept(s.id)} aria-label={`Accept: ${title(s.a)} before ${title(s.b)}`} className="flex h-9 items-center gap-1.5 rounded-[7px] bg-accent px-3 text-xs font-semibold text-accent-fg"><Check size={13} aria-hidden strokeWidth={2.5} />Accept</button>
-                    <button type="button" onClick={() => p.onDismiss(s.id)} aria-label={`Dismiss: ${title(s.a)} before ${title(s.b)}`} className="h-9 rounded-[7px] border border-line px-3 text-xs text-muted hover:bg-hover">Dismiss</button>
+                    <button type="button" onClick={() => p.onAccept(s.id)} aria-label={`Accept: ${title(s.a)} before ${title(s.b)}`} className="flex h-[30px] items-center gap-2 rounded-[7px] bg-accent pr-2.5 pl-3 text-xs font-semibold text-accent-fg">Accept{p.keys && i === 0 && <span aria-hidden className="font-mono text-[10.5px] opacity-60">A</span>}</button>
+                    <button type="button" onClick={() => p.onDismiss(s.id)} aria-label={`Dismiss: ${title(s.a)} before ${title(s.b)}`} className="flex h-[30px] items-center gap-2 rounded-[7px] border border-line pr-2.5 pl-3 text-xs text-muted hover:bg-hover">Dismiss{p.keys && i === 0 && <span aria-hidden className="font-mono text-[10.5px] opacity-70">D</span>}</button>
                   </div>
-                </div>
+                </AiPanel>
               ))}
-            </AiPanel>
+            </section>
           )}
 
           <div className="flex flex-wrap gap-2">
@@ -148,7 +167,6 @@ export function PlanInspector(p: PlanInspectorProps) {
             <button type="button" onClick={() => p.onMove(id)} className="h-10 rounded-[9px] border border-line px-3 text-[13px] text-muted hover:bg-hover">Move…</button>
             <button type="button" onClick={() => p.onEdit(id)} className="h-10 rounded-[9px] border border-line px-3 text-[13px] text-muted hover:bg-hover">Edit</button>
           </div>
-          {p.variant === "week" && p.onShowInGraph && <button type="button" onClick={() => p.onShowInGraph!(id)} className="self-start text-[13px] text-muted hover:text-fg">Show in graph →</button>}
         </>
       ) : (
         <div className="flex flex-col gap-1">

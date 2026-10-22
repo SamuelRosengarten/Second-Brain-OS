@@ -6,10 +6,10 @@ test("phone layout: bottom navigation, no horizontal scroll, capture works", asy
   await page.getByRole("button", { name: "Sign in" }).click();
   const nav = page.getByRole("navigation", { name: "Mobile" });
   await expect(nav).toBeVisible();
-  for (const label of ["Today", "Inbox", "Notes", "Plan", "Ask"]) await expect(nav.getByRole("link", { name: label })).toBeVisible();
+  for (const label of ["Today", "Postings", "Notes", "Plan", "Ask"]) await expect(nav.getByRole("link", { name: label })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden();
 
-  for (const path of ["/", "/capture", "/inbox", "/knowledge", "/projects", "/plan", "/plan?view=timeline", "/plan?view=graph", "/tasks", "/ai", "/settings", "/automations"]) {
+  for (const path of ["/", "/capture", "/inbox", "/postings", "/knowledge", "/projects", "/plan", "/plan?view=timeline", "/plan?view=graph", "/tasks", "/ai", "/settings", "/automations"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

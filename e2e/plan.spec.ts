@@ -16,7 +16,9 @@ test("plan: week view shows the seeded tasks, the inspector shows dependencies, 
     await page.getByText("Write SQL for adoption tables").first().click();
     const inspector = page.getByRole("complementary", { name: "Write SQL for adoption tables" });
     await expect(inspector).toBeVisible();
-    await expect(inspector.getByRole("heading", { name: "Depends on" })).toBeVisible();
+    await expect(inspector.getByRole("heading", { name: /^Connections/ })).toBeVisible();
+    await expect(inspector.getByText("AFTER")).toBeVisible(); // it waits for "Reply to team about DB naming"
+    await expect(inspector.getByRole("navigation", { name: "Show this task in" })).toBeVisible();
 
     await page.getByRole("link", { name: "Timeline" }).click();
     await expect(page).toHaveURL(/view=timeline/);

@@ -7,7 +7,7 @@ import { segmentClass, Segmented, useProjects } from "@/components/blocks";
 import { api, localToday, useApi } from "@/components/client";
 import { DayList, SuggestionCard } from "@/components/plan/day-list";
 import { PlanInspector } from "@/components/plan/inspector";
-import { weekLabel } from "@/components/plan/plan-utils";
+import { DAY_LIMIT_MIN, fmtHours, shortTitle, suggestRebalance, weekLabel, type RebalanceMove } from "@/components/plan/plan-utils";
 import { OverdueBanners, WeekGrid } from "@/components/plan/week-view";
 import { TaskEditDialog } from "@/components/task-list";
 import { cx, Dialog, EmptyState, ErrorBox, ListSkeleton, useToast } from "@/components/ui";
@@ -16,7 +16,7 @@ import { GraphCanvas } from "@/components/workflow/graph";
 import { useNarrow } from "@/components/workflow/hooks";
 import { buildModel, fmtDay, focusSets, hopSets } from "@/components/workflow/model";
 import { TimelineCanvas } from "@/components/workflow/timeline";
-import { addDays, weekStart } from "@/lib/dates";
+import { addDays, shortDow, weekStart } from "@/lib/dates";
 import { RANGE_DAYS, type Range } from "@/lib/workflow-logic";
 import type { Task } from "@/lib/projects";
 import type { WorkflowData } from "@/lib/workflow";
@@ -36,14 +36,16 @@ function PlanPage() {
   const { data, error, loading, reload } = useApi<WorkflowData>(`/api/workflow?today=${today}`);
 
   const asked = sp.get("view");
-  const view: View = asked === "graph" ? "graph" : asked === "timeline" && !narrow ? "timeline" : "week";
+  // Timeline and Graph are desktop-only; on a phone the Plan page is the week.
+  const view: View = asked === "graph" && !narrow ? "graph" : asked === "timeline" && !narrow ? "timeline" : "week";
   const [offset, setOffset] = useState(0);
   const [projectFilter, setProjectFilter] = useState("");
   const [range, setRange] = useState<Range>("2w");
   const [crit, setCrit] = useState(false);
   const [show, setShow] = useState({ task: true, note: true, tag: true, capture: false, sugg: true });
   const [group, setGroup] = useState(false);
-  const [hops, setHops] = useState(false);
+  const [depth, setDepth] = useState<"1" | "2" | "all">("all");
+  const [skippedMoves, setSkippedMoves] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [resetKey, setResetKey] = useState(0);
   const [sel, setSel] = useState<string | null>(null);
@@ -64,9 +66,15 @@ function PlanPage() {
     [data, today, dueOv, doneOv, hidden, crit, show],
   );
   const focusId = hov ?? sel;
-  const sets = useMemo(() => (model ? (hops && view === "graph" ? hopSets(model, focusId, 2) : focusSets(model, focusId)) : null), [model, focusId, hops, view]);
+  const sets = useMemo(() => (model ? (depth !== "all" && view === "graph" ? hopSets(model, focusId, depth === "1" ? 1 : 2) : focusSets(model, focusId)) : null), [model, focusId, depth, view]);
 
   const start = addDays(weekStart(today), offset * 7);
+  const rebalance = useMemo(() => {
+    if (!model) return null;
+    const visible = new Set(model.visibleProjects.map((p) => p.id));
+    const dues = (id: string) => (model.graph.depOut.get(id) ?? []).map((x) => model.graph.byId.get(x)).filter((x) => x && x.status !== "done" && x.due_date).map((x) => x!.due_date!);
+    return suggestRebalance(model.tasks.filter((t) => visible.has(t.project_id ?? "")), Array.from({ length: 7 }, (_, i) => addDays(start, i)), today, dues, (mv) => skippedMoves.has(`${mv.taskId}:${mv.to}`));
+  }, [model, start, today, skippedMoves]);
   const day = dayPick && dayPick >= start && dayPick <= addDays(start, 6) ? dayPick : today >= start && today <= addDays(start, 6) ? today : start;
 
   const fail = (e: unknown) => toast(e instanceof Error ? e.message : "Something went wrong", "danger");
@@ -102,6 +110,15 @@ function PlanPage() {
     setDoneOv((o) => ({ ...o, [id]: nowDone }));
     void patchTask(id, { status: nowDone ? "done" : "todo" });
   }
+  function acceptMove(mv: RebalanceMove) {
+    onDue(mv.taskId, mv.to, true);
+    toast(`Moved ${shortTitle(mv.title, 36)} to ${shortDow(mv.to)}`, "ok", {
+      label: "Undo",
+      // patched directly: onDue would compare against the stale pre-move due date and skip the write
+      onClick: () => { setDueOv((o) => ({ ...o, [mv.taskId]: mv.from })); void patchTask(mv.taskId, { due_date: mv.from }); },
+    });
+  }
+  const dismissMove = (mv: RebalanceMove) => setSkippedMoves((s) => new Set(s).add(`${mv.taskId}:${mv.to}`));
   async function dep(kind: "add" | "remove", task: string, on: string) {
     try {
       if (kind === "add") await api(`/api/tasks/${task}/deps`, { body: { depends_on: on } });
@@ -112,9 +129,12 @@ function PlanPage() {
     }
   }
   async function resolve(id: string, action: "accept" | "dismiss") {
+    const sg = model?.suggestions.find((x) => x.id === id);
+    const name = (t: string) => shortTitle(model?.graph.byId.get(t)?.title ?? "", 28);
     try {
       await api(`/api/workflow/suggestions/${id}`, { body: { action } });
-      toast(action === "accept" ? "Link added" : "Suggestion dismissed", "ok");
+      if (action === "accept" && sg) toast(`Linked ${name(sg.a)} before ${name(sg.b)}`, "ok", { label: "Undo", onClick: () => void dep("remove", sg.b, sg.a) });
+      else toast(action === "accept" ? "Link added" : "Suggestion dismissed", "ok");
       await reload();
     } catch (e) {
       fail(e);
@@ -160,8 +180,10 @@ function PlanPage() {
       onRemoveDep={(task, on) => void dep("remove", task, on)}
       onAccept={(id) => void resolve(id, "accept")}
       onDismiss={(id) => void resolve(id, "dismiss")}
-      onShowOnWeek={showOnWeek}
-      onShowInGraph={showInGraph}
+      onShowOnWeek={narrow ? undefined : showOnWeek}
+      onShowInGraph={narrow ? undefined : showInGraph}
+      keys={!narrow && (view === "graph" || !rebalance)}
+      onClose={() => { setSel(null); setSheet(false); }}
     />
   );
   const counts = model ? {
@@ -182,11 +204,13 @@ function PlanPage() {
             <button type="button" aria-label="Next week" onClick={() => setOffset((o) => o + 1)} className="grid size-9 place-items-center rounded-lg text-muted"><ChevronRight size={16} aria-hidden strokeWidth={2} /></button>
           </div>
         )}
-        <Segmented label="Plan views" className="ml-auto lg:ml-0">
-          {VIEWS.filter((v) => !(narrow && v.id === "timeline")).map((v) => (
-            <Link key={v.id} href={v.id === "week" ? "/plan" : `/plan?view=${v.id}`} replace aria-current={view === v.id ? "page" : undefined} className={segmentClass(view === v.id)}>{v.label}</Link>
-          ))}
-        </Segmented>
+        {!narrow && (
+          <Segmented label="Plan views" className="ml-auto lg:ml-0">
+            {VIEWS.map((v) => (
+              <Link key={v.id} href={v.id === "week" ? "/plan" : `/plan?view=${v.id}`} replace aria-current={view === v.id ? "page" : undefined} className={segmentClass(view === v.id)}>{v.label}</Link>
+            ))}
+          </Segmented>
+        )}
         {!narrow && view === "week" && (
           <div className="flex items-center gap-1">
             <button type="button" aria-label="Previous week" onClick={() => setOffset((o) => o - 1)} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-hover"><ChevronLeft size={16} aria-hidden strokeWidth={2} /></button>
@@ -194,6 +218,9 @@ function PlanPage() {
             <button type="button" aria-label="Next week" onClick={() => setOffset((o) => o + 1)} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-hover"><ChevronRight size={16} aria-hidden strokeWidth={2} /></button>
             {offset !== 0 && <button type="button" onClick={() => setOffset(0)} className="ml-1 h-8 rounded-lg px-2.5 text-xs text-muted hover:bg-hover">This week</button>}
           </div>
+        )}
+        {!narrow && view === "week" && (
+          <span className="flex items-center gap-[7px] text-xs text-faint"><span aria-hidden className="h-3 w-0.5 rounded-[1px] bg-muted" />{fmtHours(DAY_LIMIT_MIN)} daily limit</span>
         )}
         {!narrow && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -252,7 +279,7 @@ function PlanPage() {
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5">
                 <OverdueBanners model={model} today={today} onToday={(id) => onDue(id, today, true)} onPick={(id) => setMoveFor(id)} onSelect={(id) => setSel(id)} />
-                <WeekGrid model={model} start={start} today={today} selected={sel} onSelect={(id) => select(id)} onMoveTo={(id, d) => onDue(id, d, true)} />
+                <WeekGrid model={model} start={start} today={today} selected={sel} onSelect={(id) => select(id)} onMoveTo={(id, d) => onDue(id, d, true)} rebalance={rebalance} onAcceptMove={acceptMove} onDismissMove={dismissMove} />
               </div>
               <div className="min-w-0 max-w-[360px] flex-[1_1_300px] lg:sticky lg:top-8">{inspector}</div>
             </div>
@@ -272,7 +299,12 @@ function PlanPage() {
               <div className="flex min-w-0 flex-[999_1_560px] flex-col overflow-hidden rounded-[14px] border border-line" style={{ background: "var(--bg)" }}>
                 <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2.5">
                   <button type="button" aria-pressed={group} onClick={() => { setGroup((g) => !g); setResetKey((k) => k + 1); }} className="h-9 rounded-[9px] border px-3 text-[12.5px]" style={{ borderColor: group ? "var(--ai-line)" : "var(--border)", background: group ? "var(--ai-bg)" : "transparent", color: group ? "var(--accent)" : "var(--muted)" }}>Group by project</button>
-                  <button type="button" aria-pressed={hops} onClick={() => setHops((h) => !h)} className="h-9 rounded-[9px] border px-3 text-[12.5px]" style={{ borderColor: hops ? "var(--ai-line)" : "var(--border)", background: hops ? "var(--ai-bg)" : "transparent", color: hops ? "var(--accent)" : "var(--muted)" }}>Focus: 2 hops</button>
+                  <div role="group" aria-label="Focus depth" className="flex rounded-[9px] border border-line bg-surface p-0.5">
+                    {([["1", "1 hop"], ["2", "2 hops"], ["all", "Everything"]] as const).map(([k, label]) => (
+                      <button key={k} type="button" aria-pressed={depth === k} onClick={() => setDepth(k)} className={cx("h-8 rounded-[7px] px-2.5 text-xs", depth === k ? "bg-surface2 font-medium text-fg" : "text-muted hover:text-fg")}>{label}</button>
+                    ))}
+                  </div>
+                  {sel && model.entities.get(sel) && <span className="flex h-9 items-center rounded-[9px] border border-line bg-surface px-2.5 text-xs text-muted">Centred on <strong className="ml-1 max-w-48 truncate font-semibold text-fg">{model.entities.get(sel)!.title}</strong></span>}
                   {narrow && (
                     <div role="group" aria-label="Show in graph" className="flex gap-1.5 overflow-x-auto">
                       {([["note", "Notes"], ["tag", "Tags"], ["capture", "Captures"]] as const).map(([k, label]) => (

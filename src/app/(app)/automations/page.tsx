@@ -10,6 +10,7 @@ const JOBS = [
   { id: "process-pending", name: "Process unprocessed captures", trigger: "Manual", input: "All inbox captures with status “Unprocessed” (max 50)", does: "Runs the local model on each and stores a proposal for your review. Never saves notes or tasks by itself." },
   { id: "build-embeddings", name: "Build semantic index", trigger: "Manual", input: "Library passages without an embedding", does: "Calls the local embedding model so search can match by meaning. Requires the embedding model to be installed." },
   { id: "reindex-vault", name: "Reindex vault from Markdown files", trigger: "Manual", input: "The .md files in your vault folder", does: "Picks up files you added or edited outside the app and rebuilds the search index. Never modifies or deletes your files." },
+  { id: "run-scout", name: "Run internship scout", trigger: "Manual", input: "Your cloud agent (needs ANTHROPIC_API_KEY, agent and environment IDs). Sends it the URLs already stored.", does: "Costs API credit. Stores new postings on the Postings page. Sends no email and contacts nobody." },
 ] as const;
 
 export default function AutomationsPage() {

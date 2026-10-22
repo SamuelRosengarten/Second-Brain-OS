@@ -4,7 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Paperclip } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { ProjectSquare, useProjects } from "@/components/blocks";
-import { api, localToday } from "@/components/client";
+import { ApiFailure, api, localToday } from "@/components/client";
+import { queueCapture } from "@/components/offline-queue";
 import { cx, ErrorBox, useToast } from "@/components/ui";
 import { dowDay } from "@/lib/dates";
 import type { CreateCaptureResult } from "@/lib/captures";
@@ -68,16 +69,21 @@ function CaptureScreen() {
       const isUrlText = /^https?:\/\/\S+$/i.test(content);
       // A link shared into the app keeps its link even when you add words of your own.
       const link = type === "link" || isUrlText || !!shared.url;
+      const fields: Record<string, string> = { kind: files.length ? "file" : link ? "link" : type, content, url: isUrlText ? content : shared.url, process: tidy ? "1" : "0" };
+      if (projectId) fields.project_id = projectId;
+      if (type === "task" && due) fields.due = due;
       const form = new FormData();
-      form.set("kind", files.length ? "file" : link ? "link" : type);
-      form.set("content", content);
-      form.set("url", isUrlText ? content : shared.url);
-      form.set("process", tidy ? "1" : "0");
-      if (projectId) form.set("project_id", projectId);
-      if (type === "task" && due) form.set("due", due);
+      for (const [k, v] of Object.entries(fields)) form.set(k, v);
       files.forEach((f) => form.append("files", f));
-      const r = await api<CreateCaptureResult>("/api/captures", { form });
-      toast(r.duplicate ? "Already captured" : tidy ? "Saved to your inbox. Your local model is drafting a title and tags" : "Saved to your inbox", "ok");
+      try {
+        const r = await api<CreateCaptureResult>("/api/captures", { form });
+        toast(r.duplicate ? "Already captured" : tidy ? "Saved to your inbox. Your local model is drafting a title and tags" : "Saved to your inbox", "ok");
+      } catch (e) {
+        // Server unreachable: keep text, links and tasks on this device and send them when it is back. Files need a connection.
+        if (!(e instanceof ApiFailure && e.code === "network") || files.length) throw e;
+        queueCapture(fields);
+        toast("Saved on this device. It is sent when your PC is reachable", "ok");
+      }
       router.push("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save");
@@ -149,7 +155,7 @@ function CaptureScreen() {
       {error && <ErrorBox message={error} />}
 
       <div className="mt-auto flex flex-col gap-2.5 pt-2">
-        <p className="m-0 text-center text-[13px] text-faint text-pretty">Saved right away, before any AI runs. Your PC processes it the next time it is online.</p>
+        <p className="m-0 text-center text-[13px] text-faint text-pretty">Saved right away, before any AI runs. If your PC is off, it waits on this device until it is back.</p>
         <button type="button" onClick={() => void save()} disabled={!canSave} className="h-[54px] rounded-[14px] bg-primary text-base font-semibold text-primary-fg hover:bg-primary-hover disabled:opacity-45">{busy ? "Saving…" : "Save to inbox"}</button>
       </div>
     </div>

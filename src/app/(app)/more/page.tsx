@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, FileText, FolderKanban, ListTodo, Settings, Sparkles, Waypoints, Workflow } from "lucide-react";
+import { Briefcase, ChevronRight, FileText, FolderKanban, ListTodo, Settings, Sparkles, Waypoints, Workflow } from "lucide-react";
 import { PageHeader, RowList, rowClass } from "@/components/ui";
 
 const ITEMS = [
@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/projects", label: "Projects", note: "Goals, tasks and linked notes", icon: FolderKanban },
   { href: "/workflow", label: "Workflow", note: "Timeline, dependencies and graph", icon: Waypoints },
   { href: "/ai", label: "Ask AI", note: "Local chat and Claude handoff", icon: Sparkles },
+  { href: "/postings", label: "Internship postings", note: "Scout results, statuses and email drafts", icon: Briefcase },
   { href: "/automations", label: "Automations", note: "Manual jobs and run history", icon: Workflow },
   { href: "/settings", label: "Settings", note: "Models, backup, theme, sign out", icon: Settings },
 ];

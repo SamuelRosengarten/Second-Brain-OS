@@ -4,10 +4,11 @@ import { addDays, fullDow, shortDow } from "@/lib/dates";
 import { ProjectSquare, TaskCircle } from "../blocks";
 import type { Model } from "../workflow/model";
 import { cx } from "../ui";
-import { fmtHours, isHeavy, loadPct } from "./plan-utils";
+import { LoadBar } from "./load-bar";
+import { DAY_LIMIT_MIN, LIMIT_PCT, fmtHours, loadSegments, overBy } from "./plan-utils";
 
 /**
- * Phone version of the week: a strip of seven days (with their load) and the chosen day's tasks below.
+ * Phone version of the week: a strip of seven days (with their load against the daily limit) and the chosen day's tasks below.
  * Tapping a task opens its details in a sheet; the circle completes it.
  */
 export function DayList({ model: m, start, today, day, onDay, onOpen, onToggleDone }: {
@@ -19,6 +20,8 @@ export function DayList({ model: m, start, today, day, onDay, onOpen, onToggleDo
   const minutesOf = (d: string) => m.tasks.filter((t) => t.due_date === d && visible.has(t.project_id ?? "")).reduce((n, t) => n + (t.estimate_min ?? 0), 0);
   const tasks = m.tasks.filter((t) => t.due_date === day && visible.has(t.project_id ?? ""));
   const minutes = tasks.reduce((n, t) => n + (t.estimate_min ?? 0), 0);
+  const overMin = overBy(minutes);
+  const segs = loadSegments(tasks.filter((t) => t.estimate_min).map((t) => ({ min: t.estimate_min!, color: proj.get(t.project_id ?? "")?.color ?? "var(--faint)", done: t.status === "done" })));
 
   return (
     <div className="flex flex-col gap-4">
@@ -27,6 +30,7 @@ export function DayList({ model: m, start, today, day, onDay, onOpen, onToggleDo
           const sel = d === day;
           const isToday = d === today;
           const min = minutesOf(d);
+          const over = min > DAY_LIMIT_MIN;
           return (
             <button
               key={d}
@@ -39,18 +43,23 @@ export function DayList({ model: m, start, today, day, onDay, onOpen, onToggleDo
             >
               <span className="font-mono text-[10.5px] tracking-[0.04em] uppercase">{shortDow(d)}</span>
               <span className="text-[17px] font-semibold">{Number(d.slice(8))}</span>
-              <span className="sr-only">, {fmtHours(min)} planned{isToday ? ", today" : ""}</span>
-              <span aria-hidden className="block h-[3px] w-[22px] overflow-hidden rounded-sm bg-line"><span className="block h-[3px]" style={{ width: `${loadPct(min)}%`, background: isHeavy(min) ? "var(--warn)" : "var(--border-strong)" }} /></span>
+              <span className="sr-only">, {fmtHours(min)} planned{isToday ? ", today" : ""}{over ? ", over the daily limit" : ""}</span>
+              <span aria-hidden className="relative block h-1 w-7 rounded-sm" style={{ background: `linear-gradient(90deg, var(--border) 0 ${LIMIT_PCT}%, transparent ${LIMIT_PCT}%)` }}>
+                <span className="block h-1 rounded-sm" style={{ width: `${Math.min(100, (min / DAY_LIMIT_MIN) * LIMIT_PCT)}%`, background: over ? "var(--warn)" : d < today ? "var(--border-strong)" : "var(--faint)" }} />
+                <span className="absolute -top-0.5 block h-2 w-[1.5px] bg-muted" style={{ left: `${LIMIT_PCT}%` }} />
+              </span>
             </button>
           );
         })}
       </div>
 
       <section aria-labelledby="day-h" className="flex flex-col gap-2">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2">
           <h2 id="day-h" className="m-0 text-[17px] font-semibold">{fullDow(day)}</h2>
-          <span className={cx("font-mono text-xs", day === today ? "text-warn" : "text-faint")}>{day === today ? "TODAY · " : ""}{fmtHours(minutes)} planned</span>
+          <span className={cx("font-mono text-xs", overMin || day === today ? "text-warn" : "text-faint")}>{day === today ? "TODAY · " : ""}{fmtHours(minutes)} of {fmtHours(DAY_LIMIT_MIN)}</span>
+          {overMin > 0 && <span className="ml-auto rounded-lg border border-warn/45 bg-warn/10 px-2.5 py-1.5 font-mono text-xs text-warn">+{fmtHours(overMin)} over</span>}
         </div>
+        {minutes > 0 && <LoadBar segments={segs} className="h-2.5" />}
         {tasks.length === 0 ? (
           <p className="m-0 rounded-[14px] border border-dashed border-line px-4 py-8 text-center text-[13.5px] text-muted">Nothing planned for this day.</p>
         ) : (
