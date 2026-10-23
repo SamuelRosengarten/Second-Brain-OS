@@ -265,7 +265,7 @@ export function listTags(): { tag: string; count: number }[] {
 }
 
 // ---------- reindex from the vault (source of truth) ----------
-export interface ReindexResult { scanned: number; added: number; updated: number; removed: number; errors: string[] }
+export interface ReindexResult { scanned: number; added: number; updated: number; missing: number; errors: string[] }
 
 function walkMarkdown(dir: string, base = dir, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -281,7 +281,7 @@ function walkMarkdown(dir: string, base = dir, out: string[] = []): string[] {
 export function reindexVault(): ReindexResult {
   const cfg = getConfig();
   const db = getDb();
-  const result: ReindexResult = { scanned: 0, added: 0, updated: 0, removed: 0, errors: [] };
+  const result: ReindexResult = { scanned: 0, added: 0, updated: 0, missing: 0, errors: [] };
   const seen = new Set<string>();
   for (const rel of walkMarkdown(cfg.vaultDir)) {
     result.scanned++;
@@ -317,15 +317,12 @@ export function reindexVault(): ReindexResult {
       result.errors.push(`${rel}: ${e instanceof Error ? e.message : "unreadable"}`);
     }
   }
+  // A note whose file is gone is KEPT, not deleted: its row holds data the vault does not (project links, the capture and
+  // import it came from), and cascading deletes would destroy those if a folder was merely moved or not yet restored.
+  // The UI already shows such notes as "file missing"; delete one from the library if the file is really gone for good.
   const all = db.prepare("SELECT id, path FROM notes").all() as { id: string; path: string }[];
   for (const n of all) {
-    if (!seen.has(n.path) && !result.errors.some((e) => e.startsWith(n.path))) {
-      db.transaction(() => {
-        db.prepare("DELETE FROM note_fts WHERE note_id = ?").run(n.id);
-        db.prepare("DELETE FROM notes WHERE id = ?").run(n.id);
-      })();
-      result.removed++;
-    }
+    if (!seen.has(n.path) && !result.errors.some((e) => e.startsWith(n.path))) result.missing++;
   }
   return result;
 }

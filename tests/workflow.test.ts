@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { acceptCapture, AcceptInput, createCapture, deleteCapture, getCapture, listCaptures, processCapture, updateCapture } from "../src/lib/captures.ts";
 import { getConfig } from "../src/lib/config.ts";
-import { getNote, listNotes, reindexVault, updateNote, deleteNote } from "../src/lib/notes.ts";
+import { createNote, getNote, listNotes, reindexVault, updateNote, deleteNote } from "../src/lib/notes.ts";
 import { OllamaProvider, setProvider } from "../src/lib/ollama.ts";
 import { search, embedPending, embeddingStatus } from "../src/lib/search.ts";
 import { createProject, createTask, listTasks, projectDetail, updateTask, linkNote } from "../src/lib/projects.ts";
@@ -120,6 +120,23 @@ describe("capture -> note workflow", () => {
   });
 });
 
+describe("accept is all-or-nothing", () => {
+  it("F-01: an unknown project id fails before any note exists, and a retry makes exactly one note", async () => {
+    const { capture } = await createCapture({ content: "probe" });
+    const bad = (extra: object) => AcceptInput.parse({ title: "T", body: "B", ...extra });
+    expect(() => acceptCapture(capture.id, bad({ project_ids: ["nope"] }))).toThrow(/Unknown project/);
+    expect(() => acceptCapture(capture.id, bad({ tasks: [{ title: "x", project_id: "nope" }] }))).toThrow(/Unknown project/);
+    expect(listNotes()).toHaveLength(0);
+    expect(fs.readdirSync(getConfig().vaultDir).filter((f) => f.endsWith(".md"))).toHaveLength(0);
+    expect(getCapture(capture.id)!.status).toBe("new");
+
+    const p = createProject({ name: "Real" });
+    acceptCapture(capture.id, bad({ project_ids: [p.id], tasks: [{ title: "x", project_id: p.id }] }));
+    expect(listNotes()).toHaveLength(1);
+    expect(listTasks()).toHaveLength(1);
+  });
+});
+
 describe("notes + search", () => {
   it("edits, reindexes from files, trashes on delete", async () => {
     setProvider(fakeProvider());
@@ -141,6 +158,25 @@ describe("notes + search", () => {
     expect(getNote(note.id)).toBeNull();
     expect(fs.existsSync(path.join(getConfig().vaultDir, ".trash", note.path))).toBe(true);
     expect(listNotes().map((n) => n.title)).toEqual(["External note"]);
+  });
+
+  it("F-02: reindex keeps a note whose file is missing, with its project links, and relinks when the file returns", () => {
+    const note = createNote({ title: "Linked note", body: "hello" });
+    const p = createProject({ name: "P" });
+    linkNote(p.id, note.id);
+    const file = path.join(getConfig().vaultDir, note.path);
+    const moved = path.join(dir, "moved.md");
+    fs.renameSync(file, moved);
+
+    const r = reindexVault();
+    expect(r.missing).toBe(1);
+    expect(getNote(note.id)!.fileMissing).toBe(true);
+    expect(projectDetail(p.id)!.notes).toHaveLength(1); // link survived
+
+    fs.renameSync(moved, file);
+    reindexVault();
+    expect(getNote(note.id)!.fileMissing).toBe(false);
+    expect(projectDetail(p.id)!.notes).toHaveLength(1);
   });
 
   it("uses semantic search when embeddings exist and falls back when Ollama is gone", async () => {

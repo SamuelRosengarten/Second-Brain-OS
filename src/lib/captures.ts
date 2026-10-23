@@ -8,7 +8,7 @@ import { classifyFile, extractText, UnsupportedFileError, verifyMagic } from "./
 import { createNote, type Note } from "./notes.ts";
 import { getProvider, OllamaError } from "./ollama.ts";
 import { buildCaptureMessages, ProposalSchema, proposalJsonSchema, type Proposal } from "./prompts.ts";
-import { createTask, linkNote, listProjects } from "./projects.ts";
+import { createTask, getProject, linkNote, listProjects } from "./projects.ts";
 import { resolveInside, sanitizeFilename, uniquePath, writeFileAtomic } from "./safe-fs.ts";
 import { contentHash, log, newId, nowIso, sha256 } from "./util.ts";
 
@@ -251,6 +251,11 @@ export function acceptCapture(id: string, input: z.infer<typeof AcceptInput>): {
   const cap = getCapture(id);
   if (!cap) throw new ApiError(404, "Capture not found", "not_found");
   if (cap.status === "accepted" && cap.note_id) throw new ApiError(409, "This capture was already saved as a note.", "already_accepted");
+  // Validate everything that can fail BEFORE the note file is written, so a bad project id can never leave an orphan note
+  // behind (a retry would otherwise create a second copy).
+  for (const pid of new Set([...input.project_ids, ...input.tasks.map((t) => t.project_id).filter((p): p is string => !!p)])) {
+    if (!getProject(pid)) throw new ApiError(400, "Unknown project", "validation");
+  }
   const body = input.body.trim() || cap.content;
   const withSource = cap.url && !body.includes(cap.url) ? `${body}\n\nSource: ${cap.url}` : body;
   const note = createNote({

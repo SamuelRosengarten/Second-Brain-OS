@@ -18,7 +18,7 @@ const JOBS = {
   },
   "reindex-vault": async () => {
     const r = reindexVault();
-    return { detail: `Scanned ${r.scanned}: ${r.added} added, ${r.updated} updated, ${r.removed} removed${r.errors.length ? `, ${r.errors.length} error(s)` : ""}.`, failed: false };
+    return { detail: `Scanned ${r.scanned}: ${r.added} added, ${r.updated} updated, ${r.missing} with a missing file (kept)${r.errors.length ? `, ${r.errors.length} error(s)` : ""}.`, failed: false };
   },
   "build-embeddings": async () => {
     const r = await embedPending(2000);
