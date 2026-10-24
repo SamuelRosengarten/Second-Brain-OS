@@ -167,6 +167,7 @@ Dark-first (light theme follows the OS or Settings), compact, one icon set (luci
 | `npm run smoke` | End-to-end HTTP test against a running instance (see docs/SETUP.md) |
 | `npm run set-password` | Set or rotate the login password (invalidates sessions) |
 | `npm run backup [-- --copy-to <dir> --keep <n> --encrypt]` / `npm run export` | Create and verify a backup (optionally copy it to another drive, encrypted, and prune old ones) / export Markdown + JSON |
+| `npm run import-plan -- <plan.md> [--name <project>] [--yes]` | Replace ALL projects and tasks with the task table of a plan file (tasks get start and due dates). Dry run unless `--yes`; takes a backup first |
 | `npm run restore -- <name, folder or file.sbosenc> [--verify] --yes` | Verify only, or restore a backup from anywhere (app must be stopped) |
 | `npm run audit` | Dependency vulnerability audit |
 

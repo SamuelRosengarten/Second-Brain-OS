@@ -22,6 +22,7 @@ const taskShape = {
   description: z.string().max(5000),
   status: z.enum(["todo", "doing", "done"]),
   priority: z.enum(["low", "medium", "high"]),
+  start_date: dateStr.nullable().optional(),
   due_date: dateStr.nullable().optional(),
   project_id: z.string().nullable().optional(),
   capture_id: z.string().nullable().optional(),
@@ -37,7 +38,7 @@ export interface Project {
 }
 export interface Task {
   id: string; title: string; description: string; status: "todo" | "doing" | "done"; priority: "low" | "medium" | "high";
-  due_date: string | null; project_id: string | null; capture_id: string | null; created_at: string; completed_at: string | null;
+  start_date: string | null; due_date: string | null; project_id: string | null; capture_id: string | null; created_at: string; completed_at: string | null;
   estimate_min: number | null;
   /** Set while the task is in the trash. Trashed tasks are hidden from every list except listTrash(). */
   deleted_at: string | null;
@@ -125,13 +126,18 @@ export function createTask(input: z.input<typeof TaskInput>): Task {
   const t = TaskInput.parse(input);
   const db = getDb();
   if (t.project_id && !getProject(t.project_id)) throw new ApiError(400, "Unknown project", "validation");
+  assertDateRange(t.start_date, t.due_date);
   const id = newId();
   const now = nowIso();
   db.prepare(
-    "INSERT INTO tasks (id, title, description, status, priority, due_date, project_id, capture_id, created_at, completed_at, estimate_min) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-  ).run(id, t.title, t.description, t.status, t.priority, t.due_date ?? null, t.project_id ?? null, t.capture_id ?? null, now, t.status === "done" ? now : null, t.estimate_min ?? null);
+    "INSERT INTO tasks (id, title, description, status, priority, start_date, due_date, project_id, capture_id, created_at, completed_at, estimate_min) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run(id, t.title, t.description, t.status, t.priority, t.start_date ?? null, t.due_date ?? null, t.project_id ?? null, t.capture_id ?? null, now, t.status === "done" ? now : null, t.estimate_min ?? null);
   logActivity(t.project_id, "task.created", `Task “${t.title}” added`);
   return getTask(id)!;
+}
+
+function assertDateRange(start: string | null | undefined, due: string | null | undefined): void {
+  if (start && due && start > due) throw new ApiError(400, "Start date must be on or before the due date", "validation");
 }
 
 export const getTask = (id: string): Task | null => (getDb().prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task | undefined) ?? null;
@@ -178,12 +184,13 @@ export function updateTask(id: string, patch: z.input<typeof TaskPatch>): Task {
   const p = TaskPatch.parse(patch);
   const next = { ...cur, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) } as Task;
   if (next.project_id && !getProject(next.project_id)) throw new ApiError(400, "Unknown project", "validation");
+  assertDateRange(next.start_date, next.due_date);
   let completed = cur.completed_at;
   if (next.status === "done" && cur.status !== "done") completed = nowIso();
   if (next.status !== "done") completed = null;
   getDb()
-    .prepare("UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, project_id=?, completed_at=?, estimate_min=? WHERE id=?")
-    .run(next.title, next.description, next.status, next.priority, next.due_date ?? null, next.project_id ?? null, completed, next.estimate_min ?? null, id);
+    .prepare("UPDATE tasks SET title=?, description=?, status=?, priority=?, start_date=?, due_date=?, project_id=?, completed_at=?, estimate_min=? WHERE id=?")
+    .run(next.title, next.description, next.status, next.priority, next.start_date ?? null, next.due_date ?? null, next.project_id ?? null, completed, next.estimate_min ?? null, id);
   if (next.status === "done" && cur.status !== "done") logActivity(next.project_id, "task.done", `Completed “${next.title}”`);
   return getTask(id)!;
 }

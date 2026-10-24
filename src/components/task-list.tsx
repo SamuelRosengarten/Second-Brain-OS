@@ -82,7 +82,7 @@ export function TaskRow({ task, projectName, projects, onChange }: { task: Task;
             </span>
           )}
           {task.status === "doing" && <Badge tone="info">In progress</Badge>}
-          {task.due_date && (overdue ? <Badge tone="danger">Overdue · <span className="tnum"><span className="sm:hidden">{task.due_date.slice(5)}</span><span className="hidden sm:inline">{task.due_date}</span></span></Badge> : isToday ? <Badge tone="accent">Today</Badge> : <span className="tnum text-xs text-faint">{task.due_date}</span>)}
+          {task.due_date && (overdue ? <Badge tone="danger">Overdue · <span className="tnum"><span className="sm:hidden">{task.due_date.slice(5)}</span><span className="hidden sm:inline">{task.due_date}</span></span></Badge> : isToday ? <Badge tone="accent">Today</Badge> : <span className="tnum text-xs text-faint">{task.start_date && task.start_date !== task.due_date ? `${task.start_date} → ${task.due_date}` : task.due_date}</span>)}
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {(overdue || isToday) && <IconButton icon={CalendarClock} label={`Move ${task.title} to tomorrow`} onClick={() => void snooze(addDays(today, 1))} />}
@@ -98,7 +98,7 @@ export function TaskRow({ task, projectName, projects, onChange }: { task: Task;
 export function TaskEditDialog({ task, projects, onClose, onSaved }: { task: Task; projects?: ProjectOption[]; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const formId = useId();
-  const [f, setF] = useState({ title: task.title, description: task.description, status: task.status, priority: task.priority, due: task.due_date ?? "", project: task.project_id ?? "" });
+  const [f, setF] = useState({ title: task.title, description: task.description, status: task.status, priority: task.priority, start: task.start_date ?? "", due: task.due_date ?? "", project: task.project_id ?? "" });
   const [busy, setBusy] = useState(false);
   const today = localToday();
   async function save(e: React.FormEvent) {
@@ -108,7 +108,7 @@ export function TaskEditDialog({ task, projects, onClose, onSaved }: { task: Tas
     try {
       await api(`/api/tasks/${task.id}`, {
         method: "PATCH",
-        body: { title: f.title, description: f.description, status: f.status, priority: f.priority, due_date: f.due || null, ...(projects ? { project_id: f.project || null } : {}) },
+        body: { title: f.title, description: f.description, status: f.status, priority: f.priority, start_date: f.start || null, due_date: f.due || null, ...(projects ? { project_id: f.project || null } : {}) },
       });
       toast("Task updated");
       onSaved();
@@ -156,7 +156,8 @@ export function TaskEditDialog({ task, projects, onClose, onSaved }: { task: Tas
             </Select>
           </Field>
         </div>
-        <Field label="Due date"><Input type="date" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })} className="tnum" /></Field>
+        <Field label="Start date"><Input type="date" value={f.start} max={f.due || undefined} onChange={(e) => setF({ ...f, start: e.target.value })} className="tnum" /></Field>
+        <Field label="Due date"><Input type="date" value={f.due} min={f.start || undefined} onChange={(e) => setF({ ...f, due: e.target.value })} className="tnum" /></Field>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Quick due dates">
           {quick.map((q) => (
             <Button key={q.label} size="sm" variant={f.due === q.value ? "primary" : "secondary"} aria-pressed={f.due === q.value} onClick={() => setF({ ...f, due: q.value })}>{q.label}</Button>
@@ -179,6 +180,7 @@ export function NewTask({ projectId, projects, onCreated, autoFocus }: { project
   const toast = useToast();
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState("medium");
+  const [start, setStart] = useState("");
   const [due, setDue] = useState("");
   const [project, setProject] = useState(projectId ?? "");
   const [busy, setBusy] = useState(false);
@@ -191,8 +193,9 @@ export function NewTask({ projectId, projects, onCreated, autoFocus }: { project
     if (!title.trim() || busy) return;
     setBusy(true);
     try {
-      await api("/api/tasks", { body: { title, priority, due_date: due || null, project_id: project || null } });
+      await api("/api/tasks", { body: { title, priority, start_date: start || null, due_date: due || null, project_id: project || null } });
       setTitle("");
+      setStart("");
       setDue("");
       onCreated();
       ref.current?.focus();
@@ -210,7 +213,8 @@ export function NewTask({ projectId, projects, onCreated, autoFocus }: { project
         <option value="medium">Medium</option>
         <option value="low">Low</option>
       </Select>
-      <Input aria-label="Due date" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-40 tnum" />
+      <Input aria-label="Start date" type="date" value={start} max={due || undefined} onChange={(e) => setStart(e.target.value)} className="w-40 tnum" />
+      <Input aria-label="Due date" type="date" value={due} min={start || undefined} onChange={(e) => setDue(e.target.value)} className="w-40 tnum" />
       {!projectId && projects && (
         <Select aria-label="Project" value={project} onChange={(e) => setProject(e.target.value)} className="w-40">
           <option value="">No project</option>

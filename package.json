@@ -15,6 +15,7 @@
     "set-password": "node --experimental-strip-types scripts/set-password.ts",
     "backup": "node --experimental-strip-types scripts/backup.ts",
     "restore": "node --experimental-strip-types scripts/restore.ts",
+    "import-plan": "node --experimental-strip-types scripts/import-plan.ts",
     "export": "node --experimental-strip-types scripts/backup.ts --export",
     "scout": "node --experimental-strip-types scripts/scout.ts",
     "smoke": "node scripts/smoke.mjs",
