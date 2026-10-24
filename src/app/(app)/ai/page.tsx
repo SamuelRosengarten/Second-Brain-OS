@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ArrowUp, History, Plus, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, BookOpen, Globe, History, Plus, Sparkles, Square, X } from "lucide-react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useProjects } from "@/components/blocks";
@@ -14,6 +14,7 @@ import type { Source, StoredMessage } from "@/lib/chat";
 interface Msg { role: "user" | "assistant"; content: string; sources?: Source[] | null; grounded?: boolean; workspace?: { projects: number; tasks: number }; semantic?: boolean; ms?: number; error?: { message: string; hint?: string } }
 interface ModelsResp { ok: boolean; selected: string; models: { name: string; sizeBytes: number }[]; error?: string; hint?: string }
 interface Conv { id: string; title: string; model: string; updated_at: string }
+type Mode = "local" | "web";
 type Scope = { kind: "all" } | { kind: "project"; id: string; name: string } | { kind: "note"; id: string; title: string };
 
 const mono = "font-mono text-[11px] tracking-[0.06em] text-faint";
@@ -58,6 +59,23 @@ function Sources({ msg }: { msg: Msg | undefined }) {
   );
 }
 
+function ContextGauge({ ctx }: { ctx: { used: number; max: number } | null }) {
+  const pct = ctx ? Math.min(100, (ctx.used / ctx.max) * 100) : 0;
+  const color = pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn, #d9a441)" : "var(--accent)";
+  return (
+    <div className="flex flex-col gap-1.5" title="Tokens used by the last request, including the whole conversation so far and search results">
+      <div className="flex items-center justify-between font-mono text-[11px] text-faint">
+        <span>CONTEXT</span>
+        <span>{ctx ? `${ctx.used.toLocaleString()} / ${ctx.max.toLocaleString()} tokens · ${pct.toFixed(pct < 10 ? 1 : 0)}%` : "0 tokens · send a message"}</span>
+      </div>
+      <div role="progressbar" aria-label="Context used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-2 overflow-hidden rounded-full bg-surface2">
+        <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      {pct >= 80 && <p className="m-0 text-[12px] text-muted">Almost full. Start a new conversation to reset it.</p>}
+    </div>
+  );
+}
+
 function Chat() {
   const toast = useToast();
   const sp = useSearchParams();
@@ -68,6 +86,8 @@ function Chat() {
   const [convId, setConvId] = useState<string | undefined>();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const [ctx, setCtx] = useState<{ used: number; max: number } | null>(null);
+  const [mode, setMode] = useState<Mode>("local");
   const [useLibrary, setUseLibrary] = useState(true);
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [scopeNotes, setScopeNotes] = useState<string[] | undefined>();
@@ -90,6 +110,14 @@ function Chat() {
   }, [sp]);
   useEffect(() => { if (models.data && !model) setModel(models.data.selected); }, [models.data, model]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [msgs]);
+
+  function switchMode(next: Mode) {
+    if (next === mode || busy) return;
+    setMode(next);
+    setConvId(undefined);
+    setMsgs([]);
+    setCtx(null);
+  }
 
   async function pickScope(value: string) {
     if (value === "all") { setScope({ kind: "all" }); setScopeNotes(undefined); return; }
@@ -122,7 +150,7 @@ function Chat() {
     setInput("");
     setBusy(true);
     const t0 = Date.now();
-    setMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "", grounded: useLibrary }]);
+    setMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "", grounded: mode === "local" && useLibrary }]);
     const ctl = new AbortController();
     abort.current = ctl;
     const patchLast = (fn: (m: Msg) => Msg) => setMsgs((all) => all.map((m, i) => (i === all.length - 1 ? fn(m) : m)));
@@ -130,7 +158,7 @@ function Chat() {
       const res = await fetch("/api/chat", {
         method: "POST", signal: ctl.signal, credentials: "same-origin",
         headers: { "content-type": "application/json", "x-sbos": "1" },
-        body: JSON.stringify({ message: text, conversationId: convId, model: model || undefined, useLibrary, noteIds: useLibrary && scopeNotes?.length ? scopeNotes : undefined }),
+        body: JSON.stringify({ message: text, conversationId: convId, model: model || undefined, mode, useLibrary: mode === "local" && useLibrary, noteIds: mode === "local" && useLibrary && scopeNotes?.length ? scopeNotes : undefined }),
       });
       if (!res.ok || !res.body) {
         const d = await res.json().catch(() => ({}));
@@ -148,11 +176,12 @@ function Chat() {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
           if (!line) continue;
-          const ev = JSON.parse(line) as { type: string; text?: string; conversationId?: string; sources?: Source[]; grounded?: boolean; semantic?: boolean; workspace?: { projects: number; tasks: number }; message?: string; hint?: string };
+          const ev = JSON.parse(line) as { type: string; text?: string; conversationId?: string; sources?: Source[]; grounded?: boolean; semantic?: boolean; workspace?: { projects: number; tasks: number }; message?: string; hint?: string; used?: number; max?: number };
           if (ev.type === "meta") {
             setConvId(ev.conversationId);
             patchLast((m) => ({ ...m, sources: ev.sources, grounded: ev.grounded, workspace: ev.workspace, semantic: ev.semantic }));
-          } else if (ev.type === "delta") patchLast((m) => ({ ...m, content: m.content + (ev.text ?? "") }));
+          } else if (ev.type === "usage" && ev.used != null && ev.max) setCtx({ used: ev.used, max: ev.max });
+          else if (ev.type === "delta") patchLast((m) => ({ ...m, content: m.content + (ev.text ?? "") }));
           else if (ev.type === "error") patchLast((m) => ({ ...m, error: { message: ev.message ?? "Error", hint: ev.hint } }));
           else if (ev.type === "done") patchLast((m) => ({ ...m, ms: Date.now() - t0 }));
         }
@@ -216,7 +245,7 @@ function Chat() {
       <nav aria-label="Conversations" className="hidden min-w-0 max-w-[260px] flex-[1_1_230px] flex-col gap-3.5 border-r border-line px-3 pt-7 pb-5 lg:flex">
         <div className="flex items-center gap-2 px-1.5">
           <h1 className="m-0 text-[26px] leading-tight font-semibold tracking-[-0.02em]">Ask</h1>
-          <button type="button" aria-label="New conversation" onClick={() => { setConvId(undefined); setMsgs([]); }} className="ml-auto grid size-[34px] place-items-center rounded-[9px] bg-primary text-primary-fg hover:bg-primary-hover"><Plus size={15} aria-hidden strokeWidth={2} /></button>
+          <button type="button" aria-label="New conversation" onClick={() => { setConvId(undefined); setMsgs([]); setCtx(null); }} className="ml-auto grid size-[34px] place-items-center rounded-[9px] bg-primary text-primary-fg hover:bg-primary-hover"><Plus size={15} aria-hidden strokeWidth={2} /></button>
         </div>
         <div className="flex flex-col gap-2 overflow-y-auto">{conversationList}</div>
       </nav>
@@ -225,14 +254,24 @@ function Chat() {
       <section aria-label="Conversation" className="flex min-w-0 flex-[999_1_460px] flex-col gap-3.5 lg:gap-[22px] lg:px-10 lg:py-6">
         <header className="flex items-center gap-2.5 lg:hidden">
           <h1 className="m-0 text-[30px] leading-[1.15] font-semibold tracking-[-0.025em]">Ask</h1>
-          <span className="ml-auto flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-2 font-mono text-[11.5px] text-muted"><span aria-hidden className={`size-[7px] rounded-full ${models.data?.ok ? "bg-ok" : "bg-danger"}`} />{model || "model"}</span>
+          <span className="ml-auto flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-2 font-mono text-[11.5px] text-muted"><span aria-hidden className={`size-[7px] rounded-full ${models.data?.ok ? "bg-ok" : "bg-danger"}`} />{mode === "web" ? "web search" : model || "model"}</span>
           <button type="button" aria-label="Past conversations" onClick={() => setHistoryOpen(true)} className="grid size-11 place-items-center rounded-xl border border-line bg-surface text-muted"><History size={18} aria-hidden strokeWidth={1.8} /></button>
         </header>
 
-        {models.data && !models.data.ok && <ErrorBox message={models.data.error ?? "Ollama is unavailable"} hint={models.data.hint} onRetry={() => void models.reload()} />}
-        {models.data?.ok && model && !modelList.some((m) => m.name === model) && modelList.length > 0 && <ErrorBox message={`Selected model “${model}” is not installed.`} hint={`ollama pull ${model}`} />}
+        <div role="tablist" aria-label="Conversation type" className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-surface p-1">
+          {([["local", "Library", "Your notes, tasks and projects", BookOpen], ["web", "Web", "Searches the internet", Globe]] as const).map(([key, label, hint, Icon]) => (
+            <button key={key} type="button" role="tab" aria-selected={mode === key} onClick={() => switchMode(key)} className={`flex min-h-11 items-center justify-center gap-2 rounded-[9px] px-3 text-[13.5px] font-medium ${mode === key ? "bg-ai-bg text-accent" : "text-muted hover:bg-hover/50"}`}>
+              <Icon size={15} aria-hidden strokeWidth={1.8} />{label}<span className="hidden font-mono text-[11px] font-normal text-faint sm:inline">· {hint}</span>
+            </button>
+          ))}
+        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {mode === "web" && <ContextGauge ctx={ctx} />}
+
+        {mode === "local" && models.data && !models.data.ok && <ErrorBox message={models.data.error ?? "Ollama is unavailable"} hint={models.data.hint} onRetry={() => void models.reload()} />}
+        {mode === "local" && models.data?.ok && model && !modelList.some((m) => m.name === model) && modelList.length > 0 && <ErrorBox message={`Selected model “${model}” is not installed.`} hint={`ollama pull ${model}`} />}
+
+        {mode === "local" && <div className="flex flex-wrap items-center gap-2">
           <button type="button" aria-pressed={useLibrary} onClick={() => setUseLibrary((v) => !v)} className="flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium lg:h-8 lg:text-[12.5px]" style={{ borderColor: useLibrary ? "var(--ai-line)" : "var(--border)", background: useLibrary ? "var(--ai-bg)" : "transparent", color: useLibrary ? "var(--accent)" : "var(--muted)" }}>
             <span aria-hidden className="size-[7px] rounded-full" style={{ background: useLibrary ? "var(--accent)" : "var(--faint)" }} />Uses your library
           </button>
@@ -253,14 +292,14 @@ function Chat() {
               {modelList.map((m) => <option key={m.name} value={m.name}>{m.name} · {(m.sizeBytes / 1e9).toFixed(1)} GB</option>)}
             </select>
           </label>
-        </div>
+        </div>}
 
         <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col gap-[22px]">
           {msgs.length === 0 && (
             <div className="m-auto flex max-w-md flex-col items-center gap-2 py-12 text-center">
               <span className="grid size-11 place-items-center rounded-2xl bg-ai-bg text-accent"><Sparkles size={20} aria-hidden /></span>
-              <p className="m-0 text-base font-medium">Ask about your notes, tasks and projects</p>
-              <p className="m-0 text-[13px] text-muted">{useLibrary ? "Answers cite your notes and use your live projects and tasks. If nothing matches, it says so." : "Library is off: this is a plain chat with the local model."}</p>
+              <p className="m-0 text-base font-medium">{mode === "web" ? "Ask anything, searched on the web" : "Ask about your notes, tasks and projects"}</p>
+              <p className="m-0 text-[13px] text-muted">{mode === "web" ? "Claude searches the internet and cites the pages it used. Your notes, tasks and projects are not sent." : useLibrary ? "Answers cite your notes and use your live projects and tasks. If nothing matches, it says so." : "Library is off: this is a plain chat with the local model."}</p>
             </div>
           )}
           {msgs.map((m, i) =>
@@ -298,14 +337,14 @@ function Chat() {
         <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] mx-auto flex w-full max-w-[760px] flex-col gap-2 rounded-2xl border border-line2 bg-surface p-1.5 pl-4 lg:static lg:rounded-[14px] lg:border-line lg:p-3">
           <label htmlFor="ask-in" className="sr-only">Message</label>
           <div className="flex items-center gap-2 lg:items-end">
-            <textarea id="ask-in" rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} placeholder="Ask about your notes and tasks" className="max-h-40 min-h-11 min-w-0 flex-1 resize-none border-0 bg-transparent py-2.5 text-base leading-normal text-fg outline-none placeholder:text-faint lg:min-h-14 lg:py-1 lg:text-[15px]" />
+            <textarea id="ask-in" rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} placeholder={mode === "web" ? "Ask anything; I will search the web" : "Ask about your notes and tasks"} className="max-h-40 min-h-11 min-w-0 flex-1 resize-none border-0 bg-transparent py-2.5 text-base leading-normal text-fg outline-none placeholder:text-faint lg:min-h-14 lg:py-1 lg:text-[15px]" />
             {busy ? (
               <button type="button" aria-label="Stop" onClick={() => abort.current?.abort()} className="grid size-11 shrink-0 place-items-center rounded-xl border border-line text-fg lg:size-9 lg:rounded-[9px]"><Square size={14} aria-hidden /></button>
             ) : (
               <button type="submit" aria-label="Send" disabled={!input.trim()} className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-fg disabled:opacity-45 lg:size-9 lg:rounded-[9px]"><ArrowUp size={18} aria-hidden strokeWidth={2.2} /></button>
             )}
           </div>
-          <p className="m-0 hidden px-1 text-xs text-faint lg:block">Answers cite your notes. If nothing matches, it says so. Enter sends, Shift+Enter adds a line.</p>
+          <p className="m-0 hidden px-1 text-xs text-faint lg:block">{mode === "web" ? "Web answers use Claude via your Anthropic API key (billed). Your notes are never sent. " : "Answers cite your notes. If nothing matches, it says so. "}Enter sends, Shift+Enter adds a line.</p>
         </form>
       </section>
 
@@ -319,7 +358,7 @@ function Chat() {
         </section>
       </aside>
 
-      <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} title="Past conversations" footer={<button type="button" onClick={() => { setConvId(undefined); setMsgs([]); setHistoryOpen(false); }} className="h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-fg">New conversation</button>}>
+      <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} title="Past conversations" footer={<button type="button" onClick={() => { setConvId(undefined); setMsgs([]); setCtx(null); setHistoryOpen(false); }} className="h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-fg">New conversation</button>}>
         <div className="flex flex-col gap-2 text-fg">{conversationList}</div>
       </Dialog>
       <Dialog open={claudeOpen} onClose={() => setClaudeOpen(false)} title="Build a Claude package" wide><ClaudeHandoff /></Dialog>
@@ -327,7 +366,7 @@ function Chat() {
       <ConfirmDialog open={!!delId} title="Delete this conversation?" message="The messages are permanently removed. Your notes are not affected." onCancel={() => setDelId(null)} onConfirm={async () => {
         try {
           await api(`/api/conversations/${delId}`, { method: "DELETE" });
-          if (delId === convId) { setConvId(undefined); setMsgs([]); }
+          if (delId === convId) { setConvId(undefined); setMsgs([]); setCtx(null); }
           void convs.reload();
         } catch (e) {
           toast(e instanceof Error ? e.message : "Failed", "danger");

@@ -9,6 +9,7 @@ const Body = z.object({
   conversationId: z.string().optional(),
   model: z.string().max(100).optional(),
   useLibrary: z.boolean().default(false),
+  mode: z.enum(["local", "web"]).default("local"),
   noteIds: z.array(z.string()).max(50).optional(),
 });
 export const POST = route({ body: Body }, ({ req, body }) =>

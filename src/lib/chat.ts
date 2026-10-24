@@ -43,6 +43,40 @@ export interface ChatRequest {
   model?: string;
   useLibrary: boolean;
   noteIds?: string[];
+  /** "web" answers with Anthropic's web search and never sends your notes, tasks or projects. */
+  mode?: "local" | "web";
+}
+
+export const WEB_MODEL = "claude-sonnet-5-5";
+export const WEB_CONTEXT_TOKENS = 200_000;
+const WEB_SYSTEM_PROMPT = "You are a research assistant with web search. Search when the question needs current or external facts, answer concisely, and say when you could not find something. You have no access to the user's private notes or tasks.";
+
+/** Streams a web-searched answer from Claude. Yields text deltas, then a markdown list of the pages cited. */
+async function* webChatStream(history: ChatMessage[], onUsage: (tokens: number) => void, signal?: AbortSignal): AsyncGenerator<string> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new ApiError(400, "ANTHROPIC_API_KEY is not set (put it in .env.local) - needed for web search.", "web_config");
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const client = new Anthropic();
+  const stream = client.messages.stream(
+    {
+      model: WEB_MODEL, max_tokens: 4096, system: WEB_SYSTEM_PROMPT,
+      messages: history.filter((m) => m.role !== "system").map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+    },
+    { signal },
+  );
+  const cited = new Map<string, string>();
+  for await (const ev of stream) {
+    if (ev.type === "content_block_delta") {
+      if (ev.delta.type === "text_delta") yield ev.delta.text;
+      else if (ev.delta.type === "citations_delta" && ev.delta.citation.type === "web_search_result_location") cited.set(ev.delta.citation.url, ev.delta.citation.title ?? ev.delta.citation.url);
+    }
+  }
+  const u = (await stream.finalMessage()).usage;
+  onUsage(u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + u.output_tokens);
+  if (cited.size) {
+    const links = [...cited].map(([url, title]) => `- [${title.replace(/[[\]]/g, "")}](${url})`);
+    yield `\n\n**Sources**\n${links.join("\n")}`;
+  }
 }
 
 const enc = new TextEncoder();
@@ -55,7 +89,8 @@ const line = (o: unknown) => enc.encode(JSON.stringify(o) + "\n");
  */
 export function chatStream(req: ChatRequest, signal?: AbortSignal): ReadableStream<Uint8Array> {
   const db = getDb();
-  const model = req.model || getChatModel();
+  const web = req.mode === "web";
+  const model = web ? WEB_MODEL : req.model || getChatModel();
   const now = nowIso();
   let convId = req.conversationId;
   if (convId) {
@@ -74,7 +109,9 @@ export function chatStream(req: ChatRequest, signal?: AbortSignal): ReadableStre
       let sources: Source[] = [];
       let workspace = { text: "", projects: 0, tasks: 0 };
       try {
-        if (req.useLibrary) {
+        if (web) {
+          controller.enqueue(line({ type: "meta", conversationId, grounded: false, sources: [], model, web: true }));
+        } else if (req.useLibrary) {
           const res = await search(req.message, { limit: 6, noteIds: req.noteIds });
           sources = res.hits.map((h, i) => ({
             n: i + 1, noteId: h.noteId, title: h.title, heading: h.heading, path: h.path, chunkIndex: h.chunkIndex, text: h.text.slice(0, 1500),
@@ -90,13 +127,13 @@ export function chatStream(req: ChatRequest, signal?: AbortSignal): ReadableStre
         history.reverse();
         const system = req.useLibrary ? groundedSystemPrompt(getSystemPrompt(), sources, workspace.text, ymd()) : getSystemPrompt();
         const messages: ChatMessage[] = [{ role: "system", content: system }, ...history];
-        for await (const delta of getProvider().chatStream(model, messages, signal)) {
+        for await (const delta of web ? webChatStream(history, (used) => controller.enqueue(line({ type: "usage", used, max: WEB_CONTEXT_TOKENS })), signal) : getProvider().chatStream(model, messages, signal)) {
           answer += delta;
           controller.enqueue(line({ type: "delta", text: delta }));
         }
         controller.enqueue(line({ type: "done" }));
       } catch (e) {
-        const err = e instanceof OllamaError ? { message: e.message, hint: e.hint, code: e.code } : { message: "The request was interrupted.", code: "error" };
+        const err = e instanceof ApiError ? { message: e.message, code: e.code } : e instanceof OllamaError ? { message: e.message, hint: e.hint, code: e.code } : { message: "The request was interrupted.", code: "error" };
         if (!(e instanceof OllamaError)) log("warn", "chat.stream_failed", { message: e instanceof Error ? e.message.slice(0, 120) : "unknown" });
         try { controller.enqueue(line({ type: "error", ...err })); } catch { /* client gone */ }
       } finally {
